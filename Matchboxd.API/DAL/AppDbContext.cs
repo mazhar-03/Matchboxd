@@ -14,12 +14,15 @@ public class AppDbContext : DbContext
     public DbSet<Rating> Ratings => Set<Rating>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
-    
     public DbSet<WatchedMatch> WatchedMatches => Set<WatchedMatch>();
-
+    public DbSet<WatchlistItem> WatchlistItems { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<WatchlistItem>()
+            .HasIndex(w => new { w.UserId, w.MatchId })
+            .IsUnique(); // prevent duplicates
     }
 }

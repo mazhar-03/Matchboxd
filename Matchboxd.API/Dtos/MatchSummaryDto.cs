@@ -11,6 +11,8 @@ public class MatchSummaryDto
     public int? ScoreAway { get; set; }
     public int WatchCount { get; set; }
 
+    public string? Description { get; set; } // 🔧 Bunu ekle
+
     public double AverageRating { get; set; }
     public int TotalComments { get; set; }
 }
