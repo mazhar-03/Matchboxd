@@ -120,7 +120,7 @@ public class MatchesController : ControllerBase
             var match = await _context.Matches.FindAsync(id);
             if (match == null)
                 return NotFound("Match not found");
-            
+
             var user = await _context.Users.FindAsync(dto.UserId);
             if (user == null)
                 return NotFound("User not found");
@@ -160,9 +160,8 @@ public class MatchesController : ControllerBase
         {
             return BadRequest("Error while adding comment and/or rating: " + e.Message);
         }
-        
     }
-    
+
     [HttpPost("{matchId}/watch")]
     public async Task<IActionResult> MarkAsWatched(int matchId)
     {
@@ -187,7 +186,6 @@ public class MatchesController : ControllerBase
     private int GetCurrentUserId()
     {
         return 1; // 👈 assume this is your test user
-
     }
 
 
@@ -222,7 +220,5 @@ public class MatchesController : ControllerBase
         {
             return BadRequest("Error while adding favorite: " + e.Message);
         }
-        
     }
-
 }

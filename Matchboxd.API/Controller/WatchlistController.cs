@@ -16,7 +16,7 @@ public class WatchlistController : ControllerBase
     {
         _context = context;
     }
-    
+
     [HttpGet]
     public async Task<IActionResult> GetWatchlist()
     {
@@ -47,7 +47,7 @@ public class WatchlistController : ControllerBase
         return Ok(watchlistMatches);
     }
 
-    
+
     [HttpPost]
     public async Task<IActionResult> AddToWatchlist([FromBody] AddToWatchlistDto dto)
     {

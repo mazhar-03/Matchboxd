@@ -19,4 +19,3 @@ public class MatchImportController : ControllerBase
         return Ok("Matches imported!");
     }
 }
-

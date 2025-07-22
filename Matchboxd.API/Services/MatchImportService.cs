@@ -1,13 +1,12 @@
-﻿namespace Matchboxd.API.Services;
-
+﻿using Matchboxd.API.DAL;
 using Matchboxd.API.Models;
-using Matchboxd.API.DAL;
-using System.Net.Http.Json;
+
+namespace Matchboxd.API.Services;
 
 public class MatchImportService
 {
-    private readonly HttpClient _httpClient;
     private readonly AppDbContext _context;
+    private readonly HttpClient _httpClient;
 
     public MatchImportService(IHttpClientFactory factory, AppDbContext context)
     {
@@ -22,9 +21,7 @@ public class MatchImportService
         if (response?.Matches == null) return;
 
         foreach (var match in response.Matches)
-        {
             if (!_context.Matches.Any(m => m.ExternalId == match.Id))
-            {
                 _context.Matches.Add(new Match
                 {
                     ExternalId = match.Id,
@@ -34,10 +31,7 @@ public class MatchImportService
                     Status = match.Status,
                     Description = $"{match.Competition.Name} - {match.Stage}"
                 });
-            }
-        }
+
         await _context.SaveChangesAsync();
-
     }
-
 }
