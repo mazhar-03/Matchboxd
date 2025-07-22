@@ -25,6 +25,7 @@ var jwtConfigData = builder.Configuration.GetSection("Jwt");
 builder.Services.Configure<JwtOptions>(jwtConfigData);
 
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<EmailService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
