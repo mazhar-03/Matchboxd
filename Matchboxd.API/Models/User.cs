@@ -7,7 +7,7 @@ public class User
     public string Email { get; set; } = null!;
     public string PasswordHash { get; set; } = null!;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    
+
     public bool EmailVerified { get; set; } = false;
     public string? VerificationToken { get; set; }
     public DateTime? VerificationTokenExpiry { get; set; }

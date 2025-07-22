@@ -13,9 +13,9 @@ namespace Matchboxd.API.Controller;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly EmailService _emailService;
     private readonly PasswordHasher<User> _passwordHasher = new();
     private readonly ITokenService _tokenService;
-    private readonly EmailService _emailService;
 
     public AuthController(AppDbContext context, ITokenService tokenService, EmailService emailService)
     {
@@ -44,7 +44,7 @@ public class AuthController : ControllerBase
 
         return Ok(new { token });
     }
-    
+
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
