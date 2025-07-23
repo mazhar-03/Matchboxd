@@ -41,8 +41,18 @@ public class AuthController : ControllerBase
             return Unauthorized("Invalid password.");
 
         var token = _tokenService.GenerateToken(user.Username);
+        
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = false, 
+            SameSite = SameSiteMode.Lax,
+            Expires = DateTime.UtcNow.AddHours(1)
+        };
 
-        return Ok(new { token });
+        Response.Cookies.Append("token", token, cookieOptions);
+
+        return Ok(new { message = "Login successful" });
     }
 
     [HttpPost("register")]
