@@ -64,8 +64,9 @@ public class AuthController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
-        // Build verification link (adjust frontend URL)
-        var verificationLink = $"{Request.Scheme}://{Request.Host}/verify-email?token={user.VerificationToken}";
+        var frontendBaseUrl = "http://localhost:3000";
+        var verificationLink = $"{frontendBaseUrl}/verify-email?token={user.VerificationToken}";
+
 
         await _emailService.SendVerificationEmailAsync(user.Email, user.Username, verificationLink);
 
@@ -75,21 +76,26 @@ public class AuthController : ControllerBase
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailDto dto)
     {
+        if (string.IsNullOrEmpty(dto.Token))
+            return BadRequest(new { message = "Token is missing." });
+
         var user = await _context.Users.FirstOrDefaultAsync(u => u.VerificationToken == dto.Token);
         if (user == null)
-            return BadRequest("Invalid token.");
+            return BadRequest(new { message = "Invalid token." });
 
         if (user.VerificationTokenExpiry < DateTime.UtcNow)
-            return BadRequest("Token expired.");
+            return BadRequest(new { message = "Token expired." });
 
         user.EmailVerified = true;
         user.VerificationToken = null;
         user.VerificationTokenExpiry = null;
 
-        await _context.SaveChangesAsync();
+        Console.WriteLine("Incoming verification token: " + dto.Token);
 
-        return Ok("Email verified successfully!");
+        await _context.SaveChangesAsync();
+        return Ok(new { message = "Email verified successfully!\nYou can close this page." });
     }
+
 
     [HttpPost("resend-verification-email")]
     public async Task<IActionResult> ResendVerificationEmail([FromBody] ResendVerificationDto dto)
@@ -106,7 +112,8 @@ public class AuthController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        var verificationLink = $"{Request.Scheme}://{Request.Host}/verify-email?token={user.VerificationToken}";
+        var frontendBaseUrl = "http://localhost:3000";  
+        var verificationLink = $"{frontendBaseUrl}/verify-email?token={user.VerificationToken}";
 
         await _emailService.SendVerificationEmailAsync(user.Email, user.Username, verificationLink);
 

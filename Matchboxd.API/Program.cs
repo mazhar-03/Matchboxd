@@ -12,6 +12,19 @@ builder.Services.AddSwaggerGen();
 
 var config = builder.Configuration;
 
+var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: MyAllowSpecificOrigins,
+        policy  =>
+        {
+            policy.WithOrigins("http://localhost:3000")
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
+});
+
 builder.Services.AddHttpClient("FootballData", client =>
 {
     client.BaseAddress = new Uri(config["FootballDataApi:BaseUrl"] ?? string.Empty);
@@ -55,6 +68,9 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+app.UseHttpsRedirection();
+app.UseCors(MyAllowSpecificOrigins);
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -65,7 +81,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.UseHttpsRedirection();
+
 
 
 app.Run();
