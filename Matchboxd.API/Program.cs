@@ -16,8 +16,8 @@ var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: MyAllowSpecificOrigins,
-        policy  =>
+    options.AddPolicy(MyAllowSpecificOrigins,
+        policy =>
         {
             policy.WithOrigins("http://localhost:3000")
                 .AllowAnyHeader()
@@ -78,11 +78,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+app.UseStaticFiles(); 
 
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-
 
 
 app.Run();

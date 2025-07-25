@@ -4,9 +4,9 @@ using System.Net.Mail;
 public class EmailService
 {
     private readonly string _smtpHost;
+    private readonly string _smtpPass;
     private readonly int _smtpPort;
     private readonly string _smtpUser;
-    private readonly string _smtpPass;
 
     public EmailService(IConfiguration config)
     {
@@ -23,7 +23,8 @@ public class EmailService
         {
             From = new MailAddress(_smtpUser),
             Subject = "Verify your email",
-            Body = $"Hi {username},\n\nPlease verify your email by clicking the link below:\n{verificationLink}\n\nThanks!",
+            Body =
+                $"Hi {username},\n\nPlease verify your email by clicking the link below:\n{verificationLink}\n\nThanks!",
             IsBodyHtml = false
         };
         mail.To.Add(toEmail);

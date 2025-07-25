@@ -1,6 +1,8 @@
-﻿namespace Matchboxd.API.Services;
+﻿using Matchboxd.API.Models;
+
+namespace Matchboxd.API.Services;
 
 public interface ITokenService
 {
-    string GenerateToken(string username);
+    string GenerateToken(User user);
 }

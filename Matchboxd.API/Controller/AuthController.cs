@@ -27,32 +27,52 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
     {
-        var user = await _context.Users.SingleOrDefaultAsync(u => u.Username == loginDto.Username);
+        var user = await _context.Users
+            .SingleOrDefaultAsync(u => u.Username == loginDto.Username);
 
-        if (user == null)
-            return Unauthorized("User not found.");
-
-        if (!user.EmailVerified)
-            return Unauthorized("Email not verified.");
+        if (user == null) return Unauthorized("User not found.");
+        if (!user.EmailVerified) return Unauthorized("Email not verified.");
 
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, loginDto.Password);
-
-        if (result == PasswordVerificationResult.Failed)
+        if (result == PasswordVerificationResult.Failed) 
             return Unauthorized("Invalid password.");
 
-        var token = _tokenService.GenerateToken(user.Username);
-        
-        var cookieOptions = new CookieOptions
+        var token = _tokenService.GenerateToken(user);
+
+        // Set HTTP-only cookie
+        Response.Cookies.Append("token", token, new CookieOptions
         {
             HttpOnly = true,
-            Secure = false, 
+            Secure = false, // Enable in production (requires HTTPS)
             SameSite = SameSiteMode.Lax,
-            Expires = DateTime.UtcNow.AddHours(1)
-        };
+            Expires = DateTime.UtcNow.AddMinutes(20),
+            Domain = "localhost", // Important for local development
+            Path = "/", // Make available to all paths
+            IsEssential = true
+        });
 
-        Response.Cookies.Append("token", token, cookieOptions);
+        return Ok(new { 
+            message = "Login successful", 
+            token, // Still return in body for client-side use if needed
+            username = user.Username,
+            userPhoto = user.ProfileImageUrl
+        });
+    }
 
-        return Ok(new { message = "Login successful" });
+    [HttpPost("logout")]
+    public IActionResult Logout()
+    {
+        // Clear the authentication cookie
+        Response.Cookies.Delete("AuthToken", new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true, // Use in HTTPS environments
+            SameSite = SameSiteMode.Strict,
+            Path = "/",
+            Expires = DateTimeOffset.UtcNow.AddDays(-1) // Expire immediately
+        });
+
+        return Ok(new { message = "Successfully logged out" });
     }
 
     [HttpPost("register")]
@@ -122,7 +142,7 @@ public class AuthController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        var frontendBaseUrl = "http://localhost:3000";  
+        var frontendBaseUrl = "http://localhost:3000";
         var verificationLink = $"{frontendBaseUrl}/verify-email?token={user.VerificationToken}";
 
         await _emailService.SendVerificationEmailAsync(user.Email, user.Username, verificationLink);

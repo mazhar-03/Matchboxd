@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using System.Text;
 using Matchboxd.API.Helpers.Options;
+using Matchboxd.API.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -16,18 +17,21 @@ public class TokenService : ITokenService
         _jwtOptions = jwtOptions.Value;
     }
 
-    public string GenerateToken(string username)
+    public string GenerateToken(User user)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.UTF8.GetBytes(_jwtOptions.Key);
 
-        // Include Issuer and Audience as claims explicitly
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new(JwtRegisteredClaimNames.Sub, username),
+            new(JwtRegisteredClaimNames.Sub, user.Username),
             new(JwtRegisteredClaimNames.Iss, _jwtOptions.Issuer),
-            new(JwtRegisteredClaimNames.Aud, _jwtOptions.Audience)
+            new(JwtRegisteredClaimNames.Aud, _jwtOptions.Audience),
+
+            // ✅ Custom claims
+            new("username", user.Username),
+            new("userPhoto", user.ProfileImageUrl ?? "")
         };
 
         var tokenDescriptor = new SecurityTokenDescriptor
