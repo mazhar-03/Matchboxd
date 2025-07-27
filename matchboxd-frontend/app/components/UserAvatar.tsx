@@ -24,28 +24,26 @@ export default function UserAvatar({
     }
   };
 
-  const isLocalBackendImage = profileImageUrl?.startsWith('http://localhost:5011');
-
   return (
     <div className={`relative ${className}`}>
+      {/* Added relative positioning to this div */}
       <div
-        className="relative w-full h-full rounded-full overflow-hidden border hover:brightness-90 cursor-pointer"
+        className="relative w-full h-full rounded-full overflow-hidden border-2 border-gray-200 hover:border-gray-300 cursor-pointer transition-all"
         onClick={() => fileInputRef.current?.click()}
       >
         {profileImageUrl ? (
           <Image
-            src={profileImageUrl} // Use the full URL directly from backend
+            src={profileImageUrl}
             alt={username || "User"}
             fill
-            sizes="100%"
+            sizes="(max-width: 768px) 100vw, 50vw"
             className="object-cover"
-            unoptimized={true} // Keep unoptimized for local backend images
-            priority={false} // Optional: set to true if it's above the fold
+            unoptimized={!profileImageUrl.startsWith("/")}
+            priority={false}
             onError={(e) => {
-              // Fallback if image fails to load
               const target = e.target as HTMLImageElement;
               target.onerror = null;
-              target.src = ''; // This will trigger the fallback UI
+              target.style.display = 'none';
             }}
           />
         ) : (
@@ -55,7 +53,7 @@ export default function UserAvatar({
         )}
       </div>
 
-  <input
+      <input
         type="file"
         ref={fileInputRef}
         accept="image/*"

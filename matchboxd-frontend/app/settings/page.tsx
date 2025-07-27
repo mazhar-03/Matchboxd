@@ -32,7 +32,7 @@ export default function SettingsPage() {
       formData.append("file", file);
 
       // Call your API endpoint here
-      const response = await fetch("/api/upload-avatar", {
+      const response = await fetch("http://localhost:5011/api/settings", {
         method: "POST",
         body: formData,
       });

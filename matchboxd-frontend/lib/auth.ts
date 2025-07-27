@@ -1,17 +1,23 @@
-// utils/auth.ts
-export const getAuthToken = (): string | null => {
-  // Check localStorage first
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('authToken');
-    if (token) return token;
+import jwt from "jsonwebtoken";
 
-    // Fallback to cookies
-    const cookieToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('authToken='))
-      ?.split('=')[1];
+export function getAuthData() {
+  if (typeof window === "undefined") return { isSignedIn: false };
 
-    return cookieToken || null;
+  const token = localStorage.getItem("authToken");
+  if (!token) return { isSignedIn: false };
+
+  try {
+    const decoded = jwt.decode(token) as {
+      username?: string;
+      userPhoto?: string;
+    };
+
+    return {
+      isSignedIn: true,
+      username: decoded?.username,
+      userPhoto: decoded?.userPhoto,
+    };
+  } catch (err) {
+    return { isSignedIn: false };
   }
-  return null;
-};
+}

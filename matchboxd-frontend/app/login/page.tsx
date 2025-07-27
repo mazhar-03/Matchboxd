@@ -11,7 +11,6 @@ interface LoginResponse {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -25,11 +24,10 @@ export default function LoginPage() {
     try {
       const res = await fetch("http://localhost:5011/api/auth/login", {
         method: "POST",
-        credentials: 'include', // For cookie-based auth
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({username, password}),
       });
 
       if (!res.ok) {
@@ -40,17 +38,16 @@ export default function LoginPage() {
 
       const data: LoginResponse = await res.json();
 
-      // Store token in both localStorage and cookies
-      localStorage.setItem('token', data.token);
-      document.cookie = `token=${data.token}; path=/; max-age=${60*60*24}; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
+      // ✅ Store token in localStorage only (no cookies)
+      localStorage.setItem("authToken", data.token);
 
-      // Store user data
-      localStorage.setItem('user', JSON.stringify({
+      // ✅ Store user data
+      localStorage.setItem("user", JSON.stringify({
         username: data.username,
-        userPhoto: data.userPhoto
+        userPhoto: data.userPhoto,
       }));
 
-      // Redirect to dashboard with full reload to ensure auth state updates
+      // ✅ Redirect to dashboard (force full reload to reset auth state)
       window.location.href = "/dashboard";
 
     } catch (err: unknown) {
@@ -59,9 +56,9 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  return (
+    return (
     <div className="w-full h-screen max-w-sm mx-auto flex flex-col justify-center gap-6 p-4">
       <h1 className="text-2xl font-bold text-center">Login to Matchboxd</h1>
 

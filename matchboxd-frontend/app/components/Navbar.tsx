@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import {ChevronDown, LogOut, Pen, Settings, Heart, Bookmark, CalendarDays, Menu, User} from "lucide-react";
 import UserAvatar from "@/app/components/UserAvatar";
+import {router} from "next/client";
 
 interface NavLink {
   label: string;
@@ -51,27 +52,11 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-  const handleSignOut = async () => {
-    try {
-      // Clear client-side storage
-      localStorage.removeItem('token');
-      document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
 
-      // Optional: Make API call to invalidate server-side session
-      await fetch('/api/auth/logout', { method: 'POST' });
-
-      // Clear any React state if needed
-      if (window.__NEXT_DATA__?.props?.pageProps) {
-        window.__NEXT_DATA__.props.pageProps = {};
-      }
-
-      // Force full page reload to reset all state
-      window.location.href = '/login';
-    } catch (error) {
-      console.error('Logout failed:', error);
-      // Fallback if anything fails
-      window.location.href = '/login';
-    }
+  const handleSignOut = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("user");
+    router.push("/login");
   };
 
   return (
