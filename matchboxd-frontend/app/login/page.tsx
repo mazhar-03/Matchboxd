@@ -8,6 +8,7 @@ interface LoginResponse {
   token: string;
   username: string;
   userPhoto?: string;
+  userId:number;
 }
 
 export default function LoginPage() {
@@ -51,6 +52,7 @@ export default function LoginPage() {
       localStorage.setItem("user", JSON.stringify({
         username: data.username,
         userPhoto: data.userPhoto,
+        userId: data.userId,
       }));
 
       window.location.href = "/dashboard";

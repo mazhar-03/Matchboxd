@@ -1,6 +1,8 @@
-﻿using Matchboxd.API.DAL;
+﻿using System.Security.Claims;
+using Matchboxd.API.DAL;
 using Matchboxd.API.Dtos;
 using Matchboxd.API.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -165,7 +167,7 @@ public class MatchesController : ControllerBase
     [HttpPost("{matchId}/watch")]
     public async Task<IActionResult> MarkAsWatched(int matchId)
     {
-        var userId = GetCurrentUserId(); // however you’re getting logged-in user
+        var userId = await GetCurrentUserIdAsync(); 
 
         var alreadyWatched = await _context.WatchedMatches
             .AnyAsync(w => w.UserId == userId && w.MatchId == matchId);
@@ -182,12 +184,6 @@ public class MatchesController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok("Match marked as watched.");
     }
-
-    private int GetCurrentUserId()
-    {
-        return 1; // 👈 assume this is your test user
-    }
-
 
     [HttpPost("{id}/favorite")]
     public async Task<IActionResult> FavoriteMatch(int id, [FromBody] CreateFavoriteDto dto)
@@ -220,5 +216,22 @@ public class MatchesController : ControllerBase
         {
             return BadRequest("Error while adding favorite: " + e.Message);
         }
+    }
+    private async Task<int> GetCurrentUserIdAsync()
+    {
+        var usernameClaim = User.FindFirst(ClaimTypes.Name)?.Value ??
+                            User.FindFirst("username")?.Value ??
+                            User.FindFirst("sub")?.Value;
+
+        if (string.IsNullOrEmpty(usernameClaim))
+            throw new UnauthorizedAccessException("Username not found in claims.");
+
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Username == usernameClaim);
+
+        if (user == null)
+            throw new UnauthorizedAccessException("User not found in database.");
+
+        return user.Id;
     }
 }
