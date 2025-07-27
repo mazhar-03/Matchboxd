@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import {ChevronDown, LogOut, Pen, Settings, Heart, Bookmark, CalendarDays, Menu, User} from "lucide-react";
+import {Pen, Settings, Heart, Bookmark, CalendarDays, Menu, User} from "lucide-react";
 import UserAvatar from "@/app/components/UserAvatar";
-import {router} from "next/client";
+import { SignOutButton } from "./SignOutButton";
 
 interface NavLink {
   label: string;
@@ -21,15 +21,14 @@ interface NavbarProps {
 
 export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps) {
   const pathname = usePathname();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-    const mainLinks: NavLink[] = [
+  const mainLinks: NavLink[] = [
     { label: "Matches", href: "/matches" },
     { label: "Profile", href: "/profile" },
   ];
+
   const dropdownLinks: NavLink[] = [
     { label: "Match Diary", href: "/diary", icon: <CalendarDays className="w-4 h-4" /> },
     { label: "My Reviews", href: "/reviews", icon: <Pen className="w-4 h-4" /> },
@@ -38,12 +37,9 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
     { label: "Settings", href: "/settings", icon: <Settings className="w-4 h-4" /> },
   ];
 
-  // Close dropdowns when clicking outside
+  // Close mobile menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
         setMobileMenuOpen(false);
       }
@@ -52,12 +48,6 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const handleSignOut = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
-    router.push("/login");
-  };
 
   return (
     <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm sticky top-0 z-40">
@@ -73,7 +63,7 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden sm:flex items-center gap-6">
             {isSignedIn ? (
               <>
                 {/* Main Links */}
@@ -93,14 +83,9 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
                   ))}
                 </div>
 
-                {/* User Dropdown */}
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="flex items-center gap-2 focus:outline-none group"
-                    aria-label="User menu"
-                    aria-expanded={dropdownOpen}
-                  >
+                {/* User Profile with Sign Out */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
                     <UserAvatar
                       profileImageUrl={userPhoto}
                       username={username}
@@ -109,36 +94,20 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                       {username || "Account"}
                     </span>
-                    <ChevronDown
-                      className={`w-4 h-4 text-gray-500 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
-                    />
-                  </button>
+                  </div>
+                  <div className="hidden lg:flex">
+                    <SignOutButton />
+                  </div>
 
-                  {dropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-56 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 dark:divide-gray-700">
-                      <div className="py-1">
-                        {dropdownLinks.map((item) => (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          >
-                            <span className="mr-3">{item.icon}</span>
-                            {item.label}
-                          </Link>
-                        ))}
-                      </div>
-                      <div className="py-1">
-                        <button
-                          onClick={handleSignOut}
-                          className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        >
-                          <LogOut className="w-4 h-4 mr-3" />
-                          Sign Out
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                </div>
+
+                {/* Settings Dropdown */}
+                <div className="relative">
+                  <button
+                    className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                    aria-label="Settings"
+                  >
+                  </button>
                 </div>
               </>
             ) : (
@@ -160,7 +129,7 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
           </div>
 
           {/* Mobile Navigation */}
-          <div className="md:hidden flex items-center gap-2">
+          <div className="sm:hidden flex items-center gap-2">
             {isSignedIn ? (
               <>
                 {/* Mobile Menu Button */}
@@ -172,48 +141,13 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
                   <Menu className="w-5 h-5" />
                 </button>
 
-                {/* User Avatar (acts as dropdown trigger) */}
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="p-2 rounded-md focus:outline-none"
-                    aria-label="User menu"
-                  >
-                    <UserAvatar
-                      profileImageUrl={userPhoto}
-                      username={username}
-                      className="w-8 h-8"
-                    />
-                  </button>
-
-                  {dropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-56 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 dark:divide-gray-700">
-                      <div className="py-1">
-                        <Link
-                          href="/profile"
-                          className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                          onClick={() => setDropdownOpen(false)}
-                        >
-                          <span className="mr-3">
-                            <User
-                              className="w-5 h-5 text-gray-400 hover:text-green-500 transition-colors"
-                              strokeWidth={1.5}  // Thicker/thinner lines
-                            />
-                          </span>
-                          My Profile
-                        </Link>
-                      </div>
-                      <div className="py-1">
-                        <button
-                          onClick={handleSignOut}
-                          className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700"
-                        >
-                          <LogOut className="w-4 h-4 mr-3" />
-                          Sign Out
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                {/* User Profile */}
+                <div className="flex items-center gap-2">
+                  <UserAvatar
+                    profileImageUrl={userPhoto}
+                    username={username}
+                    className="w-8 h-8"
+                  />
                 </div>
               </>
             ) : (
@@ -256,6 +190,7 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
               </Link>
             ))}
           </div>
+          <SignOutButton />
         </div>
       )}
     </nav>
