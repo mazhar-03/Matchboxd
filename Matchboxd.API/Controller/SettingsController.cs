@@ -30,69 +30,137 @@ public class SettingsController : ControllerBase
     }
 
     [Authorize]
-    [HttpPut]
-    public async Task<IActionResult> UpdateProfile([FromForm] UpdateUserProfileDto dto)
+[HttpPut]
+public async Task<IActionResult> UpdateProfile([FromForm] UpdateUserProfileDto dto)
+{
+    _logger.LogInformation("Received update request");
+    _logger.LogInformation($"Username: {dto.Username ?? "null"}");
+    _logger.LogInformation($"Email: {dto.Email ?? "null"}");
+    _logger.LogInformation($"ProfileImage: {(dto.ProfileImage != null ? "exists" : "null")}");
+    
+    // Start transaction
+    await using var transaction = await _context.Database.BeginTransactionAsync();
+    
+    try
     {
-        // 1. Validate User
+        // 1. Get User
         var usernameClaim = User.FindFirstValue(ClaimTypes.Name) ?? 
-                            User.FindFirstValue("username") ?? 
-                            User.FindFirstValue("sub"); // "sub" is standard JWT for subject
-        if (string.IsNullOrEmpty(usernameClaim))
-            return Unauthorized("Invalid user claims");
-
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == usernameClaim);
-        if (user == null) return NotFound("User not found.");
-
-        // 2. Update User Info (Username/Email)
-        if (!string.IsNullOrWhiteSpace(dto.Username))
-        {
-            if (await IsUsernameTaken(dto.Username, user.Username))
-                return BadRequest("Username is already taken.");
+                          User.FindFirstValue("username") ?? 
+                          User.FindFirstValue("sub");
         
-            user.Username = dto.Username; // Add this line to actually update the username
+        _logger.LogInformation("Updating profile for user: {UsernameClaim}", usernameClaim);
+        
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Username == usernameClaim);
+        
+        if (user == null)
+        {
+            _logger.LogWarning("User not found for claim: {UsernameClaim}", usernameClaim);
+            return NotFound("User not found.");
         }
 
+        // 2. Track Changes
+        var changesDetected = false;
+        var originalValues = new {
+            Username = user.Username,
+            Email = user.Email,
+            ProfileImage = user.ProfileImageUrl
+        };
 
-        if (!string.IsNullOrWhiteSpace(dto.Email))
+        // 3. Update Username
+        if (!string.IsNullOrWhiteSpace(dto.Username) && 
+            !dto.Username.Equals(user.Username, StringComparison.OrdinalIgnoreCase))
+        {
+            if (await IsUsernameTaken(dto.Username, user.Username))
+            {
+                _logger.LogWarning("Username already taken: {NewUsername}", dto.Username);
+                return BadRequest("Username is already taken.");
+            }
+            
+            user.Username = dto.Username;
+            changesDetected = true;
+            _logger.LogInformation("Updating username from {Old} to {New}", 
+                originalValues.Username, dto.Username);
+        }
+
+        // 4. Update Email
+        if (!string.IsNullOrWhiteSpace(dto.Email) && 
+            !dto.Email.Equals(user.Email, StringComparison.OrdinalIgnoreCase))
         {
             if (await IsEmailTaken(dto.Email, user.Email))
+            {
+                _logger.LogWarning("Email already taken: {NewEmail}", dto.Email);
                 return BadRequest("Email is already taken.");
-        
-            user.Email = dto.Email; // Add this line to actually update the email
+            }
+            
+            user.Email = dto.Email;
             user.EmailVerified = false;
+            changesDetected = true;
+            _logger.LogInformation("Updating email from {Old} to {New}", 
+                originalValues.Email, dto.Email);
+            
             await SendVerificationEmail(user);
         }
 
-        // 3. Update Password (if provided)
-        if (!string.IsNullOrWhiteSpace(dto.CurrentPassword)
-            && !string.IsNullOrWhiteSpace(dto.NewPassword))
+        // 5. Update Password
+        if (!string.IsNullOrWhiteSpace(dto.CurrentPassword) && 
+            !string.IsNullOrWhiteSpace(dto.NewPassword))
         {
             var passwordError = await UpdatePassword(user, dto.CurrentPassword, dto.NewPassword);
-            if (passwordError != null) return BadRequest(passwordError);
+            if (passwordError != null)
+            {
+                _logger.LogWarning("Password update failed: {Error}", passwordError);
+                return BadRequest(passwordError);
+            }
+            changesDetected = true;
         }
 
-        // 4. Handle Profile Picture Upload
+        // 6. Update Profile Image
         if (dto.ProfileImage != null)
         {
             var uploadResult = await UploadProfileImage(dto.ProfileImage, user.ProfileImageUrl);
             if (!uploadResult.Success)
+            {
+                _logger.LogWarning("Image upload failed: {Error}", uploadResult.Error);
                 return BadRequest(uploadResult.Error);
-
+            }
+            
             user.ProfileImageUrl = uploadResult.FileUrl;
+            changesDetected = true;
+            _logger.LogInformation("Updated profile image from {Old} to {New}", 
+                originalValues.ProfileImage, uploadResult.FileUrl);
         }
 
-        await _context.SaveChangesAsync();
-        var newToken = _tokenService.GenerateToken(user);
-
-        // 5. Return Response
-        return Ok(new ProfileUpdateResponse
+        // 7. Save Changes
+        if (changesDetected)
         {
-            Message = "Profile updated successfully",
-            Token = newToken,
-            AvatarUrl = GetFullImageUrl(user.ProfileImageUrl), // Absolute URL
-            Username = user.Username
-        });
+            var saveResult = await _context.SaveChangesAsync();
+            _logger.LogInformation("Saved {Count} changes to database", saveResult);
+            
+            await transaction.CommitAsync();
+            
+            var newToken = _tokenService.GenerateToken(user);
+            _logger.LogInformation("Generated new JWT token for user");
+
+            return Ok(new ProfileUpdateResponse
+            {
+                Message = "Profile updated successfully",
+                Token = newToken,
+                AvatarUrl = GetFullImageUrl(user.ProfileImageUrl),
+                Username = user.Username
+            });
+        }
+
+        _logger.LogInformation("No changes detected for user {UserId}", user.Id);
+        return Ok(new { Message = "No changes detected" });
     }
+    catch (Exception ex)
+    {
+        await transaction.RollbackAsync();
+        _logger.LogError(ex, "Failed to update profile");
+        return StatusCode(500, "An error occurred while updating your profile");
+    }
+}
 
 // --- Helper Methods --- //
 

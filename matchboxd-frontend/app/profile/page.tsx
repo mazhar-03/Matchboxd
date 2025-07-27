@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
-import { updateUserProfile } from "@/lib/api";
-import UserAvatar from "@/app/components/UserAvatar";
+import { useEffect, useState } from "react";
+import jwt from "jsonwebtoken";
 import { useRouter } from "next/navigation";
+import UserAvatar from "@/app/components/UserAvatar";
 
 interface ProfileFormData {
   username: string;
@@ -13,14 +13,15 @@ interface ProfileFormData {
   confirmNewPassword: string;
 }
 
-interface UserData {
-  username: string;
-  email: string;
-  userPhoto?: string;
-}
-
 export default function ProfilePage() {
   const router = useRouter();
+  const [authState, setAuthState] = useState({
+    isSignedIn: false,
+    username: "",
+    email: "",
+    userPhoto: "",
+    isLoading: true
+  });
   const [formData, setFormData] = useState<ProfileFormData>({
     username: "",
     email: "",
@@ -28,117 +29,160 @@ export default function ProfilePage() {
     newPassword: "",
     confirmNewPassword: ""
   });
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
 
-  // Load user data on component mount
+  // Load auth state from token
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const parsedData: UserData = JSON.parse(userData);
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      const decoded = jwt.decode(token) as {
+        username?: string;
+        email?: string;
+        userPhoto?: string;
+        exp?: number;
+      };
+
+      const isExpired = decoded?.exp ? decoded.exp * 1000 < Date.now() : false;
+      if (isExpired) throw new Error("Token expired");
+
+      const userPhoto = decoded?.userPhoto
+        ? decoded.userPhoto.startsWith('http')
+          ? decoded.userPhoto
+          : `http://localhost:5011${decoded.userPhoto}`
+        : "";
+
+      setAuthState({
+        isSignedIn: true,
+        username: decoded?.username || "",
+        email: decoded?.email || "",
+        userPhoto,
+        isLoading: false
+      });
+
       setFormData(prev => ({
         ...prev,
-        username: parsedData.username,
-        email: parsedData.email
+        username: decoded?.username || "",
+        email: decoded?.email || ""
       }));
-      if (parsedData.userPhoto) {
-        setProfileImageUrl(parsedData.userPhoto);
-      }
+
+    } catch (error) {
+      console.error("Auth error:", error);
+      localStorage.removeItem("authToken");
+      router.push("/login");
     }
-  }, []);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
+    setMessage(null);
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error("No authentication token found");
-
-      const response = await fetch('http://localhost:5011/api/settings', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData) // Use actual form data
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Update failed");
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        router.push("/login");
+        return;
       }
+
+      const response = await fetch("http://localhost:5011/api/settings", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          email: formData.email,
+          currentPassword: formData.currentPassword,
+          newPassword: formData.newPassword,
+          confirmNewPassword: formData.confirmNewPassword
+        })
+      });
 
       const result = await response.json();
 
-      // Update stored user data if username changed
-      if (result.username) {
-        const userData = localStorage.getItem('user');
-        if (userData) {
-          const parsedData: UserData = JSON.parse(userData);
-          localStorage.setItem('user', JSON.stringify({
-            ...parsedData,
-            username: result.username,
-            userPhoto: result.avatarUrl || parsedData.userPhoto
-          }));
-        }
-      }
+      if (!response.ok) throw new Error(result.message || "Update failed");
 
-      // Update tokens and image URL
+      // Update local state and token
       if (result.token) {
-        localStorage.setItem('token', result.token);
-        document.cookie = `token=${result.token}; path=/;`;
+        localStorage.setItem("authToken", result.token);
+        const decoded = jwt.decode(result.token) as { username?: string, userPhoto?: string };
+        setAuthState(prev => ({
+          ...prev,
+          username: decoded?.username || prev.username,
+          userPhoto: decoded?.userPhoto
+            ? decoded.userPhoto.startsWith('http')
+              ? decoded.userPhoto
+              : `http://localhost:5011${decoded.userPhoto}`
+            : prev.userPhoto
+        }));
       }
-      if (result.avatarUrl) setProfileImageUrl(result.avatarUrl);
 
-      setSuccessMessage(result.message || "Profile updated successfully");
-
-      // Optional: Refresh to ensure all components get updated data
+      setMessage({ text: "Profile updated successfully", type: "success" });
       setTimeout(() => router.refresh(), 1000);
 
-    } catch (error: unknown) {
-      console.error("Update failed:", error);
-      setErrorMessage(error instanceof Error ? error.message : "Update failed");
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : "Update failed",
+        type: "error"
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleImageUpload = async (file: File) => {
+    setLoading(true);
+    setMessage(null);
+
     try {
-      setLoading(true);
-      setErrorMessage(null);
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        router.push("/login");
+        return;
+      }
 
-      const result = await updateUserProfile({ profileImageFile: file });
+      const formData = new FormData();
+      formData.append("ProfileImage", file);
 
-      // Update local user data
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const parsedData = JSON.parse(userData);
-        localStorage.setItem('user', JSON.stringify({
-          ...parsedData,
-          userPhoto: result.avatarUrl
+      const response = await fetch("http://localhost:5011/api/settings", {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) throw new Error(result.message || "Upload failed");
+
+      if (result.token) {
+        localStorage.setItem("authToken", result.token);
+        const decoded = jwt.decode(result.token) as { userPhoto?: string };
+        setAuthState(prev => ({
+          ...prev,
+          userPhoto: decoded?.userPhoto
+            ? decoded.userPhoto.startsWith('http')
+              ? decoded.userPhoto
+              : `http://localhost:5011${decoded.userPhoto}`
+            : prev.userPhoto
         }));
       }
 
-      setProfileImageUrl(result.avatarUrl);
+      setMessage({ text: "Profile picture updated!", type: "success" });
 
-      if (result.token) {
-        localStorage.setItem('token', result.token);
-        document.cookie = `token=${result.token}; path=/;`;
-      }
-
-      setSuccessMessage("Profile picture updated successfully!");
-      router.refresh();
-
-    } catch (err: unknown) {
-      console.error("Upload failed:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Image upload failed.");
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : "Upload failed",
+        type: "error"
+      });
     } finally {
       setLoading(false);
     }
@@ -146,124 +190,118 @@ export default function ProfilePage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
+
+  if (authState.isLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto mt-10 space-y-6 p-4">
-      <h1 className="text-2xl font-bold text-center">Update Profile</h1>
+      <h1 className="text-2xl font-bold text-center">Profile Settings</h1>
 
-      {successMessage && (
-        <div className="p-3 bg-green-100 text-green-700 rounded">
-          {successMessage}
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="p-3 bg-red-100 text-red-700 rounded">
-          {errorMessage}
+      {message && (
+        <div className={`p-3 rounded ${
+          message.type === "success"
+            ? "bg-green-100 text-green-700"
+            : "bg-red-100 text-red-700"
+        }`}>
+          {message.text}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex justify-center">
-          <UserAvatar
-            profileImageUrl={profileImageUrl}
-            username={formData.username}
-            onUpload={handleImageUpload}
-            className="w-24 h-24"
-          />
+        <div className="flex flex-col items-center gap-2">
+          <div className="relative w-24 h-24">
+            <UserAvatar
+              profileImageUrl={authState.userPhoto}
+              username={authState.username}
+              onUpload={handleImageUpload}
+              className="w-full h-full"
+            />
+          </div>
+          <p className="text-lg font-medium">{authState.username}</p>
         </div>
 
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Username
           </label>
           <input
-            id="username"
             name="username"
-            className="w-full p-2 border rounded mt-1"
-            placeholder="Username"
             value={formData.username}
             onChange={handleChange}
-            required
+            className="w-full p-2 border rounded"
           />
         </div>
 
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Email
           </label>
           <input
-            id="email"
             name="email"
-            className="w-full p-2 border rounded mt-1"
-            placeholder="Email"
             type="email"
             value={formData.email}
             onChange={handleChange}
-            required
+            className="w-full p-2 border rounded"
           />
         </div>
 
-        <div className="space-y-4 pt-4 border-t">
+        <div className="pt-4 border-t space-y-4">
           <h3 className="font-medium">Change Password</h3>
 
           <div>
-            <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Current Password
             </label>
             <input
-              id="currentPassword"
               name="currentPassword"
-              className="w-full p-2 border rounded mt-1"
-              placeholder="Current Password"
               type="password"
               value={formData.currentPassword}
               onChange={handleChange}
+              className="w-full p-2 border rounded"
             />
           </div>
 
           <div>
-            <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               New Password
             </label>
             <input
-              id="newPassword"
               name="newPassword"
-              className="w-full p-2 border rounded mt-1"
-              placeholder="New Password"
               type="password"
               value={formData.newPassword}
               onChange={handleChange}
+              className="w-full p-2 border rounded"
             />
           </div>
 
           <div>
-            <label htmlFor="confirmNewPassword" className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Confirm New Password
             </label>
             <input
-              id="confirmNewPassword"
               name="confirmNewPassword"
-              className="w-full p-2 border rounded mt-1"
-              placeholder="Confirm New Password"
               type="password"
               value={formData.confirmNewPassword}
               onChange={handleChange}
+              className="w-full p-2 border rounded"
             />
           </div>
         </div>
 
         <button
           type="submit"
-          className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700 transition-colors"
           disabled={loading}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
         >
-          {loading ? "Updating..." : "Update Profile"}
+          {loading ? "Saving..." : "Save Changes"}
         </button>
       </form>
     </div>

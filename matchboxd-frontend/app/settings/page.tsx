@@ -1,93 +1,242 @@
 "use client";
 
-import { useSession } from "next-auth/react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useToast } from "@/app/components/ui/use-toast";
+import { useState, FormEvent, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import UserAvatar from "@/app/components/UserAvatar";
 
-const profileSchema = z.object({
-  username: z.string().min(3),
-  email: z.string().email(),
-});
+interface ProfileFormData {
+  username: string;
+  email: string;
+  currentPassword?: string;
+  newPassword?: string;
+  confirmNewPassword?: string;
+  profileImageFile?: File;
+}
 
-type ProfileFormValues = z.infer<typeof profileSchema>;
-
-export default function SettingsPage() {
-  const { data: session, update } = useSession();
-  const { toast } = useToast();
-
-  const { register, handleSubmit } = useForm<ProfileFormValues>({
-    resolver: zodResolver(profileSchema),
-    defaultValues: {
-      username: session?.user?.username || "",
-      email: session?.user?.email || "",
-    },
+export default function ProfilePage() {
+  const router = useRouter();
+  const [formData, setFormData] = useState<ProfileFormData>({
+    username: "",
+    email: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: ""
   });
+  const [profileImage, setProfileImage] = useState<File | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
 
-  const handleAvatarUpload = async (file: File) => {
+  // Load initial user data
+  useEffect(() => {
+    const loadUserData = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:5011/api/user', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          setFormData({
+            username: userData.username,
+            email: userData.email,
+            currentPassword: "",
+            newPassword: "",
+            confirmNewPassword: ""
+          });
+          if (userData.profileImageUrl) {
+            setProfileImageUrl(userData.profileImageUrl);
+          }
+        } else {
+          throw new Error('Failed to fetch user data');
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+        setMessage({text: 'Failed to load profile data', type: 'error'});
+      }
+    };
+
+    loadUserData();
+  }, [router]);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
 
-      // Call your API endpoint here
-      const response = await fetch("http://localhost:5011/api/settings", {
-        method: "POST",
-        body: formData,
+      const formDataToSend = new FormData();
+      formDataToSend.append('Username', formData.username);
+      formDataToSend.append('Email', formData.email);
+
+      if (formData.currentPassword && formData.newPassword) {
+        formDataToSend.append('CurrentPassword', formData.currentPassword);
+        formDataToSend.append('NewPassword', formData.newPassword);
+      }
+
+      if (profileImage) {
+        formDataToSend.append('ProfileImage', profileImage);
+      }
+
+      const response = await fetch('http://localhost:5011/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formDataToSend
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        await update({ image: data.url });
-        toast({ title: "Avatar updated successfully!" });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Update failed");
       }
-    } catch (error) {
-      toast({ title: "Error uploading avatar", variant: "destructive" });
+
+      // Update local data
+      if (result.token) {
+        localStorage.setItem('token', result.token);
+      }
+      if (result.avatarUrl) {
+        setProfileImageUrl(result.avatarUrl);
+      }
+
+      setMessage({text: result.message || "Profile updated successfully", type: 'success'});
+      router.refresh();
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Update failed";
+      setMessage({text: errorMessage, type: 'error'});
+    } finally {
+      setLoading(false);
     }
   };
 
-  return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
+  const handleImageUpload = async (file: File) => {
+    setProfileImage(file);
+    // Create a preview URL
+    setProfileImageUrl(URL.createObjectURL(file));
+  };
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-1">
-          <h2 className="text-lg font-semibold mb-4">Profile Picture</h2>
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  return (
+    <div className="max-w-md mx-auto mt-10 space-y-6 p-4">
+      <h1 className="text-2xl font-bold text-center">Update Profile</h1>
+
+      {message && (
+        <div className={`p-3 rounded ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex justify-center">
           <UserAvatar
-            profileImageUrl={session?.user?.image}
-            username={session?.user?.username}
-            onUpload={handleAvatarUpload}  // Now properly typed
+            profileImageUrl={profileImageUrl}
+            username={formData.username}
+            onUpload={handleImageUpload}
             className="w-24 h-24"
           />
         </div>
 
-        <div className="md:col-span-2">
-          <h2 className="text-lg font-semibold mb-4">Profile Information</h2>
-          <form onSubmit={handleSubmit((data) => console.log(data))} className="space-y-4">
-            <div>
-              <label className="block mb-1">Username</label>
-              <input
-                {...register("username")}
-                className="w-full p-2 border rounded"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1">Email</label>
-              <input
-                type="email"
-                {...register("email")}
-                className="w-full p-2 border rounded"
-              />
-            </div>
-
-            <button type="submit" className="px-4 py-2 bg-blue-500 text-white rounded">
-              Save Changes
-            </button>
-          </form>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Username
+          </label>
+          <input
+            name="username"
+            className="w-full p-2 border rounded mt-1"
+            value={formData.username}
+            onChange={handleChange}
+            required
+          />
         </div>
-      </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Email
+          </label>
+          <input
+            name="email"
+            type="email"
+            className="w-full p-2 border rounded mt-1"
+            value={formData.email}
+            onChange={handleChange}
+            required
+          />
+        </div>
+
+        <div className="space-y-4 pt-4 border-t">
+          <h3 className="font-medium">Change Password</h3>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Current Password
+            </label>
+            <input
+              name="currentPassword"
+              type="password"
+              className="w-full p-2 border rounded mt-1"
+              value={formData.currentPassword}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              New Password
+            </label>
+            <input
+              name="newPassword"
+              type="password"
+              className="w-full p-2 border rounded mt-1"
+              value={formData.newPassword}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Confirm New Password
+            </label>
+            <input
+              name="confirmNewPassword"
+              type="password"
+              className="w-full p-2 border rounded mt-1"
+              value={formData.confirmNewPassword}
+              onChange={handleChange}
+            />
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700 transition-colors disabled:opacity-50"
+          disabled={loading}
+        >
+          {loading ? "Updating..." : "Update Profile"}
+        </button>
+      </form>
     </div>
   );
 }
