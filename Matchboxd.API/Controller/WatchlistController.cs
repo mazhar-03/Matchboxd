@@ -1,6 +1,8 @@
-﻿using Matchboxd.API.DAL;
+﻿using System.Security.Claims;
+using Matchboxd.API.DAL;
 using Matchboxd.API.Dtos;
 using Matchboxd.API.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,7 +22,7 @@ public class WatchlistController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetWatchlist()
     {
-        var userId = GetCurrentUserId(); // Şimdilik sabit ID, JWT eklendiğinde güncellenecek
+        var userId =await GetCurrentUserIdAsync(); // Şimdilik sabit ID, JWT eklendiğinde güncellenecek
 
         var watchlistMatches = await _context.WatchlistItems
             .Where(w => w.UserId == userId)
@@ -48,12 +50,12 @@ public class WatchlistController : ControllerBase
     }
 
 
-    [HttpPost]
+    [HttpPost("add")]
     public async Task<IActionResult> AddToWatchlist([FromBody] AddToWatchlistDto dto)
     {
         try
         {
-            var userId = GetCurrentUserId(); // TODO: JWT logic sonra eklenecek
+            var userId = await GetCurrentUserIdAsync(); 
             if (userId == null)
                 return BadRequest("UserId not provided");
 
@@ -85,10 +87,58 @@ public class WatchlistController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-
-    private int GetCurrentUserId()
+    
+    [HttpPost("remove")]
+    public async Task<IActionResult> RemoveFromWatchlist([FromBody] AddToWatchlistDto dto)
     {
-        // Şimdilik statik ID, JWT eklendiğinde güncellenecek
-        return 1;
+        try
+        {
+            var userId = await GetCurrentUserIdAsync(); // Your JWT or auth logic
+            if (userId == null)
+                return BadRequest("UserId not provided");
+
+            var item = await _context.WatchlistItems
+                .FirstOrDefaultAsync(w => w.UserId == userId && w.MatchId == dto.MatchId);
+
+            if (item == null)
+                return NotFound("Match is not in your watchlist.");
+
+            _context.WatchlistItems.Remove(item);
+            await _context.SaveChangesAsync();
+
+            return Ok("Match removed from watchlist.");
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    private async Task<int> GetCurrentUserIdAsync()
+    {
+        foreach(var claim in User.Claims)
+        {
+            Console.WriteLine($"Claim type: {claim.Type}, value: {claim.Value}");
+        }
+        // 1. Önce sub claim'ine bak
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+    
+        if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out var userId))
+        {
+            return userId;
+        }
+
+        // 2. Eski yöntemle devam et
+        var usernameClaim = User.FindFirst(ClaimTypes.Name)?.Value 
+                            ?? User.FindFirst("username")?.Value;
+
+        if (string.IsNullOrEmpty(usernameClaim))
+            throw new UnauthorizedAccessException("User identifier not found in claims.");
+
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Username == usernameClaim);
+
+        return user?.Id ?? throw new UnauthorizedAccessException("User not found in database.");
     }
 }

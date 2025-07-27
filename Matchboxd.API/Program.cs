@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using Matchboxd.API.DAL;
 using Matchboxd.API.Helpers.Options;
@@ -56,7 +57,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.FromMinutes(20),
 
             // I tried everything but everytime I got Unauthorized. Without that i did not make it to recognize the username for the system.
-            NameClaimType = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+            NameClaimType = ClaimTypes.NameIdentifier
         };
     });
 

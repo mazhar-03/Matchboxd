@@ -25,14 +25,15 @@ public class TokenService : ITokenService
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new(JwtRegisteredClaimNames.Sub, user.Username),
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()), // ✅ sub = user ID
             new(JwtRegisteredClaimNames.Iss, _jwtOptions.Issuer),
             new(JwtRegisteredClaimNames.Aud, _jwtOptions.Audience),
 
-            // ✅ Custom claims
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()), // ✅ matches what backend expects
             new("username", user.Username),
             new("userPhoto", user.ProfileImageUrl ?? "")
         };
+
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

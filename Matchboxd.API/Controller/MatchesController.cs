@@ -115,39 +115,44 @@ public class MatchesController : ControllerBase
 
 
     [HttpPost("{id}/rate-comment")]
+    [Authorize]
     public async Task<IActionResult> RateAndCommentMatch(int id, [FromBody] CreateRatingCommentDto dto)
     {
         try
         {
+            // 1. Extract user ID from JWT
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+                return Unauthorized("Invalid or missing user ID in token");
+
+            // 2. Find match
             var match = await _context.Matches.FindAsync(id);
             if (match == null)
                 return NotFound("Match not found");
 
-            var user = await _context.Users.FindAsync(dto.UserId);
-            if (user == null)
-                return NotFound("User not found");
-
+            // 3. Save rating if provided
             if (dto.Score.HasValue)
             {
                 var rating = new Rating
                 {
                     MatchId = id,
-                    UserId = dto.UserId,
+                    UserId = userId,
                     Score = dto.Score.Value,
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.Ratings.Add(rating);
             }
 
+            // 4. Save comment if provided
             if (!string.IsNullOrWhiteSpace(dto.Content))
             {
-                if (match.Status != "finished")
+                if (match.Status != "FINISHED")
                     return BadRequest("Cannot comment before match is finished");
 
                 var comment = new Comment
                 {
                     MatchId = id,
-                    UserId = dto.UserId,
+                    UserId = userId,
                     Content = dto.Content,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -155,14 +160,14 @@ public class MatchesController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
-
             return Ok("Rating and/or comment added");
         }
         catch (Exception e)
         {
-            return BadRequest("Error while adding comment and/or rating: " + e.Message);
+            return StatusCode(500, "Error while adding comment and/or rating: " + e.Message);
         }
     }
+
 
     [HttpPost("{matchId}/watch")]
     public async Task<IActionResult> MarkAsWatched(int matchId)
@@ -186,16 +191,21 @@ public class MatchesController : ControllerBase
     }
 
     [HttpPost("{id}/favorite")]
-    public async Task<IActionResult> FavoriteMatch(int id, [FromBody] CreateFavoriteDto dto)
+    [Authorize]
+    public async Task<IActionResult> FavoriteMatch(int id)
     {
         try
         {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+                return Unauthorized("Invalid or missing user ID in token");
+
             var match = await _context.Matches.FindAsync(id);
             if (match == null)
                 return NotFound("Match not found");
 
             var alreadyExists = await _context.Favorites
-                .AnyAsync(f => f.MatchId == id && f.UserId == dto.UserId);
+                .AnyAsync(f => f.MatchId == id && f.UserId == userId);
 
             if (alreadyExists)
                 return BadRequest("Match is already in favorites");
@@ -203,7 +213,7 @@ public class MatchesController : ControllerBase
             var fav = new Favorite
             {
                 MatchId = id,
-                UserId = dto.UserId,
+                UserId = userId,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -214,24 +224,35 @@ public class MatchesController : ControllerBase
         }
         catch (Exception e)
         {
-            return BadRequest("Error while adding favorite: " + e.Message);
+            return StatusCode(500, "Server error: " + e.Message);
         }
     }
+
     private async Task<int> GetCurrentUserIdAsync()
     {
-        var usernameClaim = User.FindFirst(ClaimTypes.Name)?.Value ??
-                            User.FindFirst("username")?.Value ??
-                            User.FindFirst("sub")?.Value;
+        foreach(var claim in User.Claims)
+        {
+            Console.WriteLine($"Claim type: {claim.Type}, value: {claim.Value}");
+        }
+        // 1. Önce sub claim'ine bak
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+    
+        if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out var userId))
+        {
+            return userId;
+        }
+
+        // 2. Eski yöntemle devam et
+        var usernameClaim = User.FindFirst(ClaimTypes.Name)?.Value 
+                            ?? User.FindFirst("username")?.Value;
 
         if (string.IsNullOrEmpty(usernameClaim))
-            throw new UnauthorizedAccessException("Username not found in claims.");
+            throw new UnauthorizedAccessException("User identifier not found in claims.");
 
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == usernameClaim);
 
-        if (user == null)
-            throw new UnauthorizedAccessException("User not found in database.");
-
-        return user.Id;
+        return user?.Id ?? throw new UnauthorizedAccessException("User not found in database.");
     }
 }
