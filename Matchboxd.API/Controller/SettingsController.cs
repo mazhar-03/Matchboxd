@@ -102,7 +102,16 @@ public async Task<IActionResult> UpdateProfile([FromForm] UpdateUserProfileDto d
             await SendVerificationEmail(user);
         }
 
-        // 5. Update Password
+        // 5. Confirm password mismatch
+        if (!string.IsNullOrWhiteSpace(dto.NewPassword) &&
+            !string.IsNullOrWhiteSpace(dto.CurrentPassword) &&
+            dto.NewPassword != dto.ConfirmNewPassword)
+        {
+            _logger.LogWarning("New password and confirmation do not match");
+            return BadRequest(new { message = "New password and confirmation do not match" });
+        }
+
+// 5. Update Password
         if (!string.IsNullOrWhiteSpace(dto.CurrentPassword) && 
             !string.IsNullOrWhiteSpace(dto.NewPassword))
         {
@@ -110,10 +119,11 @@ public async Task<IActionResult> UpdateProfile([FromForm] UpdateUserProfileDto d
             if (passwordError != null)
             {
                 _logger.LogWarning("Password update failed: {Error}", passwordError);
-                return BadRequest(passwordError);
+                return BadRequest(new { message = passwordError });
             }
             changesDetected = true;
         }
+
 
         // 6. Update Profile Image
         if (dto.ProfileImage != null)
@@ -164,19 +174,8 @@ public async Task<IActionResult> UpdateProfile([FromForm] UpdateUserProfileDto d
 
 // --- Helper Methods --- //
 
-    private async Task<bool> IsUsernameTaken(string newUsername, string currentUsername)
-        => newUsername != currentUsername
-           && await _context.Users.AnyAsync(u => u.Username == newUsername);
-
-    private async Task<bool> IsEmailTaken(string newEmail, string currentEmail)
-        => newEmail != currentEmail
-           && await _context.Users.AnyAsync(u => u.Email == newEmail);
-
     private async Task<string?> UpdatePassword(User user, string currentPassword, string newPassword)
     {
-        if (newPassword.Length < 8)
-            return "Password must be at least 8 characters long.";
-
         if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword)
             != PasswordVerificationResult.Success)
             return "Current password is incorrect.";
@@ -184,6 +183,13 @@ public async Task<IActionResult> UpdateProfile([FromForm] UpdateUserProfileDto d
         user.PasswordHash = _passwordHasher.HashPassword(user, newPassword);
         return null;
     }
+    private async Task<bool> IsUsernameTaken(string newUsername, string currentUsername)
+        => newUsername != currentUsername
+           && await _context.Users.AnyAsync(u => u.Username == newUsername);
+
+    private async Task<bool> IsEmailTaken(string newEmail, string currentEmail)
+        => newEmail != currentEmail
+           && await _context.Users.AnyAsync(u => u.Email == newEmail);
 
     private async Task SendVerificationEmail(User user)
     {

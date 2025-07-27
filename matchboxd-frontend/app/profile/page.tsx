@@ -83,41 +83,60 @@ export default function ProfilePage() {
     setLoading(true);
     setMessage(null);
 
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    // ✅ Do this early
+    if (formData.newPassword !== formData.confirmNewPassword) {
+      setMessage({ text: "New password and confirm password do not match.", type: "error" });
+      setLoading(false);
+      return;
+    }
+
     try {
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
+      const formDataToSend = new FormData();
+      formDataToSend.append("Username", formData.username);
+      formDataToSend.append("Email", formData.email);
+      formDataToSend.append("CurrentPassword", formData.currentPassword);
+      formDataToSend.append("NewPassword", formData.newPassword);
+      formDataToSend.append("ConfirmNewPassword", formData.confirmNewPassword); // ✅ Important!
 
       const response = await fetch("http://localhost:5011/api/settings", {
         method: "PUT",
         headers: {
-          "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({
-          username: formData.username,
-          email: formData.email,
-          currentPassword: formData.currentPassword,
-          newPassword: formData.newPassword,
-          confirmNewPassword: formData.confirmNewPassword
-        })
+        body: formDataToSend
       });
 
-      const result = await response.json();
+      let result;
+      const contentType = response.headers.get("Content-Type");
 
-      if (!response.ok) throw new Error(result.message || "Update failed");
+      if (contentType && contentType.includes("application/json")) {
+        result = await response.json();
+      } else {
+        result = { message: await response.text() };
+      }
 
-      // Update local state and token
+      if (!response.ok) {
+        throw new Error(result.message || "Update failed");
+      }
+
       if (result.token) {
         localStorage.setItem("authToken", result.token);
-        const decoded = jwt.decode(result.token) as { username?: string, userPhoto?: string };
+        const decoded = jwt.decode(result.token) as {
+          username?: string;
+          userPhoto?: string;
+        };
+
         setAuthState(prev => ({
           ...prev,
           username: decoded?.username || prev.username,
           userPhoto: decoded?.userPhoto
-            ? decoded.userPhoto.startsWith('http')
+            ? decoded.userPhoto.startsWith("http")
               ? decoded.userPhoto
               : `http://localhost:5011${decoded.userPhoto}`
             : prev.userPhoto
@@ -126,7 +145,6 @@ export default function ProfilePage() {
 
       setMessage({ text: "Profile updated successfully", type: "success" });
       setTimeout(() => router.refresh(), 1000);
-
     } catch (error) {
       setMessage({
         text: error instanceof Error ? error.message : "Update failed",
@@ -136,6 +154,8 @@ export default function ProfilePage() {
       setLoading(false);
     }
   };
+
+
 
   const handleImageUpload = async (file: File) => {
     setLoading(true);

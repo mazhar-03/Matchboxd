@@ -27,27 +27,32 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({username, password}),
+        body: JSON.stringify({ username, password }),
       });
 
+      let responseData;
+      const contentType = res.headers.get("Content-Type");
+
+      if (contentType && contentType.includes("application/json")) {
+        responseData = await res.json();
+      } else {
+        const text = await res.text();
+        responseData = { message: text };
+      }
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        setError(errorData.message || "Login failed");
+        setError(responseData.message || "Login failed");
         return;
       }
 
-      const data: LoginResponse = await res.json();
+      const data: LoginResponse = responseData;
 
-      // ✅ Store token in localStorage only (no cookies)
       localStorage.setItem("authToken", data.token);
-
-      // ✅ Store user data
       localStorage.setItem("user", JSON.stringify({
         username: data.username,
         userPhoto: data.userPhoto,
       }));
 
-      // ✅ Redirect to dashboard (force full reload to reset auth state)
       window.location.href = "/dashboard";
 
     } catch (err: unknown) {
@@ -56,9 +61,10 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
-    return (
+
+  return (
     <div className="w-full h-screen max-w-sm mx-auto flex flex-col justify-center gap-6 p-4">
       <h1 className="text-2xl font-bold text-center">Login to Matchboxd</h1>
 
