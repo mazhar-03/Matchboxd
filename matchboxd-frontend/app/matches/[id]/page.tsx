@@ -51,24 +51,18 @@ export default function MatchDetailPage() {
         setMatch(matchData);
         console.log('Match data:', matchData);
 
-        const token = localStorage.getItem('authToken');
-        console.log('Token from localStorage:', token);
-        if (token) {
-          console.log('Fetching user actions for match');
-          const actionsRes = await fetch(`http://localhost:5011/api/matches/${id}/user-actions`, {
-            headers: {'Authorization': `Bearer ${token}`}
-          });
-          console.log('User actions response status:', actionsRes.status);
-          if (actionsRes.ok) {
-            const actionsData = await actionsRes.json();
-            console.log('User actions data:', actionsData);
-            setUserActions(actionsData);
-            if (actionsData.userRating) setRating(actionsData.userRating);
-          } else {
-            console.warn('Failed to fetch user actions:', await actionsRes.text());
+        const username = localStorage.getItem('username');
+
+        if (username && matchData.ratings.length > 0) {
+          const userRating = matchData.ratings.find(r => r.username === username);
+          const userComment = matchData.comments.find(c => c.username === username);
+
+          if (userRating) {
+            setRating(userRating.score);
           }
-        } else {
-          console.warn('No token found in localStorage');
+          if (userComment) {
+            setComment(userComment.content);
+          }
         }
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -112,41 +106,35 @@ export default function MatchDetailPage() {
   };
 
   const handleRateAndComment = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      console.log('handleRateAndComment token:', token);
-      if (!token) {
-        alert('Please login to rate and comment');
-        return;
-      }
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      alert('Please login to rate and comment');
+      return;
+    }
 
-      const res = await fetch(`http://localhost:5011/api/matches/${id}/rate-comment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          score: rating,
-          content: comment
-        })
-      });
+    const method = rating > 0 || comment.trim() ? 'PUT' : 'POST';
 
-      console.log('Rate and comment response status:', res.status);
-      const text = await res.text();
-      console.log('Rate and comment response text:', text);
+    const res = await fetch(`http://localhost:5011/api/matches/${id}/rate-comment`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        score: rating || null,
+        content: comment || null
+      })
+    });
 
-      if (res.ok) {
-        alert('Rating and comment submitted!');
-        window.location.reload();
-      } else {
-        alert(text);
-      }
-    } catch (err) {
-      console.error('Error submitting rating/comment:', err);
-      alert('Error submitting rating/comment');
+    if (res.ok) {
+      alert('Review submitted!');
+      window.location.reload();
+    } else {
+      const errText = await res.text();
+      alert(`Error: ${errText}`);
     }
   };
+
 
   const handleWatchlist = async (action: 'add' | 'remove') => {
     try {
@@ -320,7 +308,7 @@ export default function MatchDetailPage() {
                 <div key={idx} className="bg-white p-4 rounded-lg shadow">
                   <div className="flex justify-between">
                     <div>
-                      <h4 className="font-bold">{comment.username}</h4>
+                      <h4 className="text-gray-500 font-bold">{comment.username}</h4>
                       <p className="text-gray-700">{comment.content}</p>
                     </div>
                     <div className="flex items-center">
