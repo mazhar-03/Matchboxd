@@ -15,4 +15,5 @@ public class Match
 
     public ICollection<Rating> Ratings { get; set; }
     public ICollection<Comment> Comments { get; set; }
+    public ICollection<Favorite> Favorites { get; set; } = new List<Favorite>();
 }

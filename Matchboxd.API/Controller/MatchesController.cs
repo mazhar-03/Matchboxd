@@ -117,56 +117,80 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/rate-comment")]
     [Authorize]
     public async Task<IActionResult> RateAndCommentMatch(int id, [FromBody] CreateRatingCommentDto dto)
+{
+    try
     {
-        try
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null)
+            return Unauthorized("User not found in token");
+
+        int userId = int.Parse(userIdClaim.Value);
+        
+        var match = await _context.Matches.FindAsync(id);
+        if (match == null)
+            return NotFound("Match not found");
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+            return NotFound("User not found");
+
+        bool hasRating = dto.Score.HasValue;
+        bool hasComment = !string.IsNullOrWhiteSpace(dto.Content);
+
+        if (!hasRating && !hasComment)
+            return BadRequest("Either a rating or comment must be provided.");
+
+        if (hasRating)
         {
-            // 1. Extract user ID from JWT
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-                return Unauthorized("Invalid or missing user ID in token");
-
-            // 2. Find match
-            var match = await _context.Matches.FindAsync(id);
-            if (match == null)
-                return NotFound("Match not found");
-
-            // 3. Save rating if provided
-            if (dto.Score.HasValue)
+            var rating = new Rating
             {
-                var rating = new Rating
-                {
-                    MatchId = id,
-                    UserId = userId,
-                    Score = dto.Score.Value,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.Ratings.Add(rating);
-            }
-
-            // 4. Save comment if provided
-            if (!string.IsNullOrWhiteSpace(dto.Content))
-            {
-                if (match.Status != "FINISHED")
-                    return BadRequest("Cannot comment before match is finished");
-
-                var comment = new Comment
-                {
-                    MatchId = id,
-                    UserId = userId,
-                    Content = dto.Content,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.Comments.Add(comment);
-            }
-
-            await _context.SaveChangesAsync();
-            return Ok("Rating and/or comment added");
+                MatchId = id,
+                UserId = userId,
+                Score = dto.Score.Value,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.Ratings.Add(rating);
         }
-        catch (Exception e)
+
+        if (hasComment)
         {
-            return StatusCode(500, "Error while adding comment and/or rating: " + e.Message);
+            if (match.Status != "FINISHED")
+                return BadRequest("Cannot comment before match is finished");
+
+            var comment = new Comment
+            {
+                MatchId = id,
+                UserId = userId,
+                Content = dto.Content,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.Comments.Add(comment);
         }
+
+        // 🚨 Automatically add to WatchedMatch if not already exists
+        bool alreadyWatched = await _context.WatchedMatches
+            .AnyAsync(w => w.UserId == userId && w.MatchId == id);
+
+        if (!alreadyWatched)
+        {
+            var watched = new WatchedMatch
+            {
+                UserId = userId,
+                MatchId = id,
+                WatchedAt = DateTime.UtcNow
+            };
+            _context.WatchedMatches.Add(watched);
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok("Rating and/or comment added. Match marked as watched.");
     }
+    catch (Exception e)
+    {
+        return BadRequest("Error while adding comment and/or rating: " + e.Message);
+    }
+}
+
 
 
     [HttpPost("{matchId}/watch")]
@@ -227,6 +251,76 @@ public class MatchesController : ControllerBase
             return StatusCode(500, "Server error: " + e.Message);
         }
     }
+    
+    [HttpPut("{matchId}/rate-comment")]
+[Authorize]
+public async Task<IActionResult> UpdateCommentAndRating(int matchId, [FromBody] CreateRatingCommentDto dto)
+{
+    var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null)
+        return Unauthorized("User not found in token");
+
+    int userId = int.Parse(userIdClaim.Value);
+
+    // Yorumu kontrol et
+    var comment = await _context.Comments
+        .FirstOrDefaultAsync(c => c.MatchId == matchId && c.UserId == userId);
+
+    if (comment != null && !string.IsNullOrWhiteSpace(dto.Content))
+    {
+        comment.Content = dto.Content;
+        comment.CreatedAt = DateTime.UtcNow;
+    }
+    else if (comment == null && !string.IsNullOrWhiteSpace(dto.Content))
+    {
+        // Yeni yorum ekle (isteğe bağlı)
+        _context.Comments.Add(new Comment
+        {
+            UserId = userId,
+            MatchId = matchId,
+            Content = dto.Content,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
+    // Rating kontrol et
+    var rating = await _context.Ratings
+        .FirstOrDefaultAsync(r => r.MatchId == matchId && r.UserId == userId);
+
+    if (rating != null && dto.Score.HasValue)
+    {
+        rating.Score = dto.Score.Value;
+        rating.CreatedAt = DateTime.UtcNow;
+    }
+    else if (rating == null && dto.Score.HasValue)
+    {
+        // Yeni rating ekle (isteğe bağlı)
+        _context.Ratings.Add(new Rating
+        {
+            UserId = userId,
+            MatchId = matchId,
+            Score = dto.Score.Value,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
+    // Watched kaydı da ekle
+    var watched = await _context.WatchedMatches
+        .FirstOrDefaultAsync(w => w.UserId == userId && w.MatchId == matchId);
+    if (watched == null)
+    {
+        _context.WatchedMatches.Add(new WatchedMatch
+        {
+            UserId = userId,
+            MatchId = matchId,
+            WatchedAt = DateTime.UtcNow
+        });
+    }
+
+    await _context.SaveChangesAsync();
+    return Ok("Updated");
+}
+
 
     private async Task<int> GetCurrentUserIdAsync()
     {

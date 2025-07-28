@@ -23,6 +23,9 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const [desktopDropdownOpen, setDesktopDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
 
   const mainLinks: NavLink[] = [
     { label: "Matches", href: "/matches" },
@@ -48,6 +51,27 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        mobileMenuRef.current &&
+        !mobileMenuRef.current.contains(e.target as Node)
+      ) {
+        setMobileMenuOpen(false);
+      }
+
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setDesktopDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
 
   return (
     <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm sticky top-0 z-40">
@@ -67,12 +91,12 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
             {isSignedIn ? (
               <>
                 {/* Main Links */}
-                <div className="flex gap-4">
+                <div className="flex gap-4 ">
                   {mainLinks.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`px-1 py-2 text-sm font-medium transition-colors ${
+                      className={`px-3 py-2 font-medium transition-colors text-xl ${
                         pathname === item.href
                           ? "text-green-600 dark:text-green-400 border-b-2 border-green-600 dark:border-green-400"
                           : "text-gray-700 hover:text-green-600 dark:text-gray-300 dark:hover:text-green-400"
@@ -82,23 +106,40 @@ export default function Navbar({ isSignedIn, username, userPhoto }: NavbarProps)
                     </Link>
                   ))}
                 </div>
-
-                {/* User Profile with Sign Out */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-4 relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setDesktopDropdownOpen((prev) => !prev)}
+                    className="flex items-center gap-2 focus:outline-none"
+                  >
                     <UserAvatar
                       profileImageUrl={userPhoto}
                       username={username}
                       className="w-8 h-8"
                     />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {username || "Account"}
-                    </span>
-                  </div>
-                  <div className="hidden lg:flex">
-                    <SignOutButton />
-                  </div>
+                    <span className="text-lg font-medium text-gray-700 dark:text-gray-300">
+      {username || "Account"}
+    </span>
+                    <span className="text-gray-500 text-3xl pt-1">▾</span>
+                  </button>
 
+                  {/* Dropdown menu (only desktop) */}
+                  {desktopDropdownOpen && (
+                    <div className="absolute right-0 mt-72 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-md z-50">
+                      {dropdownLinks.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          onClick={() => setDesktopDropdownOpen(false)}
+                        >
+                          {item.icon}
+                          {item.label}
+                        </Link>
+                      ))}
+                      <div className="border-t border-gray-200 dark:border-gray-700" />
+                      <SignOutButton />
+                    </div>
+                  )}
                 </div>
 
                 {/* Settings Dropdown */}
