@@ -1,38 +1,23 @@
 "use client";
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { Star, StarHalf } from "lucide-react";
+import { useRouter } from "next/navigation";
+import StarRating from "@/app/components/StarRating";
+
 
 interface UserReview {
   matchId: number;
   homeTeam: string;
   awayTeam: string;
   matchDate: string;
-  status: string;
+  status?: string; // Optional
   score: number | null;
   comment: string | null;
   reviewedAt: string | null;
 }
 
-function StarRating({ score }: { score: number }) {
-  const fullStars = Math.floor(score);
-  const halfStar = score - fullStars >= 0.5;
-  const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
-
-  return (
-    <div className="flex items-center gap-1 text-yellow-400">
-      {[...Array(fullStars)].map((_, i) => (
-        <Star key={"full" + i} className="w-5 h-5" />
-      ))}
-      {halfStar && <StarHalf className="w-5 h-5" />}
-      {[...Array(emptyStars)].map((_, i) => (
-        <Star key={"empty" + i} className="w-5 h-5 opacity-30" />
-      ))}
-    </div>
-  );
-}
-
 export default function CreatedReviewsPage() {
+  const router = useRouter();  // <-- here
   const [reviews, setReviews] = useState<UserReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,12 +26,9 @@ export default function CreatedReviewsPage() {
     const fetchReviews = async () => {
       try {
         const token = localStorage.getItem("authToken");
-        const res = await axios.get<UserReview[]>(
-          "http://localhost:5011/api/users/me/reviews",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const res = await axios.get<UserReview[]>("http://localhost:5011/api/users/me/reviews", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setReviews(res.data);
       } catch (err) {
         setError("Failed to load reviews.");
@@ -57,23 +39,26 @@ export default function CreatedReviewsPage() {
     fetchReviews();
   }, []);
 
-  if (loading) return <p>Loading reviews...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
-  if (reviews.length === 0) return <p>You have no reviews yet.</p>;
+  if (loading) return <p className="text-center py-8">Loading reviews...</p>;
+  if (error) return <p className="text-center text-red-500 py-8">{error}</p>;
+  if (reviews.length === 0) return <p className="text-center py-8">You have no reviews yet.</p>;
 
   return (
     <div className="max-w-3xl mx-auto p-4">
       <h1 className="text-2xl font-semibold mb-6">My Reviews & Ratings</h1>
       <ul className="space-y-6">
         {reviews.map((review) => (
-          <li key={review.matchId} className="border rounded-md p-4 shadow-sm">
+          <li key={review.matchId} className="border rounded-md p-4 shadow-sm dark:border-gray-700">
             <div className="flex justify-between mb-2">
-              <h2 className="text-lg font-bold">
+              <h2
+                className="text-lg font-bold cursor-pointer hover:underline"
+                onClick={() => router.push(`/matches/${review.matchId}`)}  // <-- clickable matchname
+              >
                 {review.homeTeam} vs {review.awayTeam}
               </h2>
               <span className="text-sm text-gray-500">
-  Reviewed on {new Date(review.reviewedAt ?? "").toLocaleDateString()}
-</span>
+                {review.reviewedAt ? new Date(review.reviewedAt).toLocaleDateString() : "No date"}
+              </span>
             </div>
             <div className="flex items-center gap-4 mb-2">
               {review.score !== null ? (
@@ -81,12 +66,9 @@ export default function CreatedReviewsPage() {
               ) : (
                 <span className="italic text-gray-400">No rating given</span>
               )}
-              <span className="text-sm text-gray-500 capitalize">
-                {review.status}
-              </span>
             </div>
             {review.comment ? (
-              <div className="font-serif bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md p-3 mt-2 text-gray-800 dark:text-gray-100 shadow-sm text-base leading-relaxed">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3 mt-2 text-gray-800 dark:text-gray-100">
                 {review.comment}
               </div>
             ) : (

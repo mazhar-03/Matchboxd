@@ -8,8 +8,8 @@ import {
   MessageSquareText,
   CalendarDays,
 } from "lucide-react";
-import InteractiveStarRating from "@/app/components/StarRating";
 import { format } from "date-fns";
+import StarRating from "@/app/components/StarRating";
 
 interface DiaryEntry {
   matchId: number;
@@ -131,12 +131,8 @@ export default function DiaryPage() {
               </p>
 
               {/* Star Rating */}
-              <InteractiveStarRating
-                value={editMode === entry.matchId ? editedScore : entry.score ?? 0}
-                editable={editMode === entry.matchId}
-                onChange={(val) => {
-                  if (editMode === entry.matchId) setEditedScore(val);
-                }}
+              <StarRating
+                score={editMode === entry.matchId ? editedScore : entry.score ?? 0}
               />
 
               {entry.comment && entry.comment.trim() !== "" && (
