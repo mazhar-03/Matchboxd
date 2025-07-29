@@ -33,7 +33,6 @@ export default function MatchDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
-  const [reviews, setReviews] = useState<{ id: number; userName: string; content: string; createdAt: string }[]>([]);
   const [userActions, setUserActions] = useState({
     hasWatched: false,
     hasFavorited: false,
@@ -90,11 +89,8 @@ export default function MatchDetailPage() {
       if (!token) return;
 
       try {
-        const [watchedRes, watchlistRes, favoriteRes] = await Promise.all([
+        const [watchedRes, watchlistRes] = await Promise.all([
           fetch(`http://localhost:5011/api/users/me/matches/${id}/watched`, {
-            headers: {Authorization: `Bearer ${token}`}
-          }),
-          fetch(`http://localhost:5011/api/users/me/watchlist/${id}`, {
             headers: {Authorization: `Bearer ${token}`}
           }),
           fetch(`http://localhost:5011/api/users/me/favorites/${id}`, {
@@ -104,13 +100,11 @@ export default function MatchDetailPage() {
 
         const watchedData = watchedRes.ok ? await watchedRes.json() : {hasWatched: false};
         const watchlistData = watchlistRes.ok ? await watchlistRes.json() : {isInWatchlist: false};
-        const favoriteData = favoriteRes.ok ? await favoriteRes.json() : {hasFavorited: false};
 
         setUserActions(prev => ({
           ...prev,
           hasWatched: watchedData.hasWatched,
-          isInWatchlist: watchlistData.isInWatchlist,
-          hasFavorited: favoriteData.hasFavorited
+          isInWatchlist: watchlistData.isInWatchlist
         }));
       } catch (err) {
         console.error('Error fetching user actions:', err);
@@ -241,17 +235,6 @@ export default function MatchDetailPage() {
     }
   };
 
-  useEffect(() => {
-    const fetchComments = async () => {
-      const res = await fetch(`http://localhost:5011/api/matches/${match}/comments`);
-      if (res.ok) {
-        const data = await res.json();
-        setReviews(data);
-      }
-    };
-
-    fetchComments();
-  }, [match]);
 
 
 
@@ -301,14 +284,18 @@ export default function MatchDetailPage() {
       {/* Kullanıcı Aksiyonları */}
       <div className="flex flex-wrap gap-4 mb-8">
         <button
-          onClick={handleWatchToggle}
-          className={`flex items-center gap-2 px-4 py-2 ${
-            userActions.hasWatched ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'
-          } text-white rounded-lg`}
+          onClick={match.status === "FINISHED" ? handleWatchToggle : undefined}
+          disabled={match.status !== "FINISHED"}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white ${
+            userActions.hasWatched
+              ? 'bg-yellow-600 hover:bg-yellow-700'
+              : 'bg-blue-600 hover:bg-blue-700'
+          } ${match.status !== "FINISHED" ? 'opacity-50 cursor-not-allowed hover:bg-blue-600' : ''}`}
         >
           <EyeIcon className="h-5 w-5" />
           {userActions.hasWatched ? 'Unmark as Watched' : 'Mark as Watched'}
         </button>
+
 
         {/* Maç FINISHED değilse göster */}
         {match.status !== 'FINISHED' && (
@@ -387,40 +374,39 @@ export default function MatchDetailPage() {
           {/* Yorum Listesi */}
           <div className="space-y-4">
             {match.comments
-              .filter(comment => comment.content && comment.content.trim() !== '')  // boş içerikleri filtrele
-              .map((comment, idx) => (
-                <div key={idx} className="bg-gray-700 p-4 rounded-lg">
-                  <div className="flex justify-between">
-                    <div>
-                      <h4 className="font-bold text-white">{comment.username}</h4>
-                      <p className="text-gray-300 mt-1">{comment.content}</p>
-                    </div>
+              .filter(comment => comment.content && comment.content.trim() !== '') // boş içerikleri filtrele
+              .map((comment, idx) => {
+                const commentRating = match.ratings.find(r => r.username === comment.username)?.score || 0;
 
-                    <div className="flex flex-col items-end">
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map((star) => {
-                          const commentRating = match.ratings.find(r =>
-                            r.username === comment.username
-                          )?.score || 0;
+                return (
+                  <div key={idx} className="bg-gray-700 p-4 rounded-lg">
+                    <div className="flex justify-between">
+                      <div>
+                        <h4 className="font-bold text-white">{comment.username}</h4>
+                        <p className="text-gray-300 mt-1">{comment.content}</p>
+                      </div>
 
-                          return (
+                      <div className="flex flex-col items-end">
+                        <div className="flex">
+                          {[1, 2, 3, 4, 5].map(star => (
                             <StarIcon
                               key={star}
                               className={`w-5 h-5 ${
                                 star <= commentRating ? 'text-yellow-400 fill-current' : 'text-gray-500'
                               }`}
                             />
-                          );
-                        })}
+                          ))}
+                        </div>
+                        <span className="text-sm text-gray-400 mt-1">
+                {new Date(comment.createdAt).toLocaleDateString()}
+              </span>
                       </div>
-                      <span className="text-sm text-gray-400 mt-1">
-              {new Date(comment.createdAt).toLocaleDateString()}
-            </span>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
+
 
         </div>
       )}
