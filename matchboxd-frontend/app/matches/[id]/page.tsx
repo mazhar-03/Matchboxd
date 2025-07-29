@@ -33,6 +33,7 @@ export default function MatchDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [reviews, setReviews] = useState<{ id: number; userName: string; content: string; createdAt: string }[]>([]);
   const [userActions, setUserActions] = useState({
     hasWatched: false,
     hasFavorited: false,
@@ -53,33 +54,27 @@ export default function MatchDetailPage() {
     fetchWatchedCount();
   }, [id]);
 
-
   useEffect(() => {
     const fetchData = async () => {
       try {
-        console.log(`Fetching match details for id: ${id}`);
         const matchRes = await fetch(`http://localhost:5011/api/matches/${id}`);
-        console.log('Match details response status:', matchRes.status);
         if (!matchRes.ok) throw new Error('Failed to fetch match');
         const matchData: Match = await matchRes.json();
         setMatch(matchData);
-        console.log('Match data:', matchData);
 
         const username = localStorage.getItem('username');
-
-        if (username && matchData.ratings.length > 0) {
+        if (username) {
           const userRating = matchData.ratings.find(r => r.username === username);
-          const userComment = matchData.comments.find(c => c.username === username);
-
           if (userRating) {
             setRating(userRating.score);
+            setUserActions(prev => ({...prev, userRating: userRating.score}));
           }
+          const userComment = matchData.comments.find(c => c.username === username);
           if (userComment) {
             setComment(userComment.content);
           }
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
         setLoading(false);
@@ -94,30 +89,40 @@ export default function MatchDetailPage() {
       const token = localStorage.getItem("authToken");
       if (!token) return;
 
-      const res = await fetch(`http://localhost:5011/api/users/me/matches/${id}/watched`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      try {
+        const [watchedRes, watchlistRes, favoriteRes] = await Promise.all([
+          fetch(`http://localhost:5011/api/users/me/matches/${id}/watched`, {
+            headers: {Authorization: `Bearer ${token}`}
+          }),
+          fetch(`http://localhost:5011/api/users/me/watchlist/${id}`, {
+            headers: {Authorization: `Bearer ${token}`}
+          }),
+          fetch(`http://localhost:5011/api/users/me/favorites/${id}`, {
+            headers: {Authorization: `Bearer ${token}`}
+          })
+        ]);
 
-      if (res.ok) {
-        const data = await res.json();
+        const watchedData = watchedRes.ok ? await watchedRes.json() : {hasWatched: false};
+        const watchlistData = watchlistRes.ok ? await watchlistRes.json() : {isInWatchlist: false};
+        const favoriteData = favoriteRes.ok ? await favoriteRes.json() : {hasFavorited: false};
+
         setUserActions(prev => ({
           ...prev,
-          hasWatched: data.hasWatched,
+          hasWatched: watchedData.hasWatched,
+          isInWatchlist: watchlistData.isInWatchlist,
+          hasFavorited: favoriteData.hasFavorited
         }));
+      } catch (err) {
+        console.error('Error fetching user actions:', err);
       }
     };
-
     fetchUserActions();
   }, [id]);
 
-
-
-  const handleRateAndComment = async () => {
+  const handleSubmit = async () => {
     const token = localStorage.getItem('authToken');
     if (!token) {
-      alert('Please login to rate and comment');
+      alert('Please login to submit');
       return;
     }
 
@@ -144,16 +149,42 @@ export default function MatchDetailPage() {
     }
   };
 
+  const handleWatchToggle = async () => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      alert('Please login to toggle watch status');
+      return;
+    }
 
-  const handleWatchlist = async (action: 'add' | 'remove') => {
     try {
-      const token = localStorage.getItem('authToken');
-      console.log(`handleWatchlist token: ${token}, action: ${action}`);
-      if (!token) {
-        alert('Please login to modify watchlist');
-        return;
-      }
+      const method = userActions.hasWatched ? 'DELETE' : 'POST';
+      const res = await fetch(`http://localhost:5011/api/matches/${id}/watch`, {
+        method,
+        headers: {Authorization: `Bearer ${token}`}
+      });
 
+      if (res.ok) {
+        setUserActions(prev => ({...prev, hasWatched: !prev.hasWatched}));
+        setWatchedCount(prev => userActions.hasWatched ? prev - 1 : prev + 1);
+      } else {
+        const error = await res.text();
+        alert(`Error: ${error}`);
+      }
+    } catch (err) {
+      console.error('Watch toggle error:', err);
+      alert('Error toggling watch status');
+    }
+  };
+
+  const handleWatchlistToggle = async () => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      alert('Please login to toggle watchlist');
+      return;
+    }
+
+    try {
+      const action = userActions.isInWatchlist ? 'remove' : 'add';
       const res = await fetch(`http://localhost:5011/api/watchlist/${action}`, {
         method: 'POST',
         headers: {
@@ -163,159 +194,87 @@ export default function MatchDetailPage() {
         body: JSON.stringify({matchId: id})
       });
 
-      console.log(`Watchlist ${action} response status:`, res.status);
-      const text = await res.text();
-      console.log(`Watchlist ${action} response text:`, text);
-
       if (res.ok) {
-        setUserActions(prev => ({...prev, isInWatchlist: action === 'add'}));
-        alert(`Match ${action === 'add' ? 'added to' : 'removed from'} watchlist!`);
+        setUserActions(prev => ({...prev, isInWatchlist: !prev.isInWatchlist}));
       } else {
-        alert(text);
+        const error = await res.text();
+        alert(`Error: ${error}`);
       }
     } catch (err) {
-      console.error('Error modifying watchlist:', err);
-      alert('Error modifying watchlist');
+      console.error('Watchlist toggle error:', err);
+      alert('Error toggling watchlist');
     }
   };
 
-  const handleFavorite = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      if (!token) {
-        alert('Please login to add to favorites');
-        return;
-      }
+  const handleFavoriteToggle = async () => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      alert('Please login to favorite');
+      return;
+    }
 
-      const res = await fetch(`http://localhost:5011/api/matches/${id}/favorite`, {
+    try {
+      const res = await fetch('http://localhost:5011/api/users/me/favorite/toggle', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({ MatchId: Number(id) }) // id string olabilir, number yap
       });
 
-      const text = await res.text();
       if (res.ok) {
-        setUserActions(prev => ({...prev, hasFavorited: true}));
-        alert('Match added to favorites!');
+        // Backend'den dönen metin "Added to favorites" ya da "Removed from favorites" olabilir
+        const message = await res.text();
+
+        setUserActions(prev => ({
+          ...prev,
+          hasFavorited: message.includes('Added')
+        }));
       } else {
-        alert(text);
+        const error = await res.text();
+        alert(`Error: ${error}`);
       }
     } catch (err) {
-      console.error('Error favoriting match:', err);
-      alert('Error favoriting match');
-    }
-  };
-
-  const handleUnwatch = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      if (!token) {
-        alert('Please login to unmark as watched');
-        return;
-      }
-
-      const res = await fetch(`http://localhost:5011/api/matches/${id}/watch`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const text = await res.text();
-      console.log('Unwatch response:', res.status, text);
-
-      if (res.ok) {
-        setUserActions(prev => ({ ...prev, hasWatched: false }));
-      } else {
-        alert(text);
-      }
-    } catch (err) {
-      console.error('Error unwatching match:', err);
-      alert('Error unwatching match');
-    }
-  };
-
-  const handleWatch = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      console.log('handleWatch token:', token);
-      if (!token) {
-        alert('Please login to mark as watched');
-        return;
-      }
-
-      const res = await fetch(`http://localhost:5011/api/matches/${id}/watch`, {
-        method: 'POST',
-        headers: {'Authorization': `Bearer ${token}`}
-      });
-      console.log('Mark as watched response status:', res.status);
-
-      const text = await res.text();
-      console.log('Mark as watched response text:', text);
-
-      if (res.ok) {
-        setUserActions(prev => ({...prev, hasWatched: true}));
-      } else {
-        alert(text);
-      }
-    } catch (err) {
-      console.error('Error marking as watched:', err);
-      alert('Error marking as watched');
+      console.error('Favorite toggle error:', err);
+      alert('Error toggling favorite');
     }
   };
 
   useEffect(() => {
-    const fetchWatchedStatus = async () => {
-      const token = localStorage.getItem('authToken');
-      console.log('handleWatch token:', token);
-      if (!token) {
-        alert('Please login to mark as watched');
-        return;
-      }
-
-      const res = await fetch(`http://localhost:5011/api/users/me/matches/${id}/watched`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
+    const fetchComments = async () => {
+      const res = await fetch(`http://localhost:5011/api/matches/${match}/comments`);
       if (res.ok) {
         const data = await res.json();
-        setUserActions(prev => ({ ...prev, hasWatched: data.hasWatched }));
-      } else {
-        console.error('Watched status fetch failed');
+        setReviews(data);
       }
     };
 
-    fetchWatchedStatus();
-  }, [id]);
+    fetchComments();
+  }, [match]);
 
 
-  if (loading) return <div className="text-center py-8">Loading match details...</div>;
-  if (error) return <div className="text-center text-red-600 py-8">Error: {error}</div>;
+
+
+  if (loading) return <div className="text-center py-8">Loading...</div>;
   if (error) return <div className="text-center text-red-600 py-8">Error: {error}</div>;
   if (!match) return <div className="text-center py-8">Match not found</div>;
 
-
   return (
     <div className="max-w-4xl mx-auto p-4">
-      {/* Maç Başlığı */}
+      {/* Maç Detayları */}
       <div className="bg-gray-800 text-white p-6 rounded-lg mb-6 relative">
         <Link href="/matches" className="absolute top-4 left-4 flex items-center text-sm hover:text-gray-300 transition-colors">
           <ArrowLeftIcon className="w-5 h-5 mr-1" />
           <span>Matches</span>
         </Link>
-        {/* Watched bilgisi - sağ üst köşede */}
-        <div className="flex justify-end items-center mb-2">
+
+        <div className="absolute top-4 right-4 flex items-center text-sm">
           <EyeIcon className="w-5 h-5 mr-1" />
-          <span>{watchedCount}</span>
+          <span>{watchedCount} watched</span>
         </div>
 
-        {/* Takım adları ve skor - merkezde */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 pt-8">
           <div className="text-2xl font-bold">{match.homeTeam}</div>
           <div className="text-xl">vs</div>
           <div className="text-2xl font-bold">{match.awayTeam}</div>
@@ -326,7 +285,6 @@ export default function MatchDetailPage() {
             </div>
           )}
 
-          {/* Durum bilgisi - skorun altında */}
           <div className={`px-3 py-1 rounded-full inline-block ${
             match.status === 'FINISHED' ? 'bg-green-600' :
               match.status === 'CANCELED' ? 'bg-red-600' : 'bg-yellow-600'
@@ -335,119 +293,137 @@ export default function MatchDetailPage() {
           </div>
         </div>
 
-        {/* Tarih bilgisi - en altta */}
         <div className="text-center text-gray-300 mt-4">
           {new Date(match.matchDate).toLocaleString()}
         </div>
       </div>
 
-      {/* Kullanıcı Aksiyon Butonları */}
+      {/* Kullanıcı Aksiyonları */}
       <div className="flex flex-wrap gap-4 mb-8">
-        {match.status === 'FINISHED' ? (
-          <>
-            {userActions.hasWatched ? (
-              <button
-                onClick={handleUnwatch}
-                className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg"
-              >
-                <EyeIcon className="h-5 w-5" />
-                Unmark as Watched
-              </button>
-            ) : (
-              <button
-                onClick={handleWatch}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-              >
-                <EyeIcon className="h-5 w-5" />
-                Mark as Watched
-              </button>
-            )}
+        <button
+          onClick={handleWatchToggle}
+          className={`flex items-center gap-2 px-4 py-2 ${
+            userActions.hasWatched ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'
+          } text-white rounded-lg`}
+        >
+          <EyeIcon className="h-5 w-5" />
+          {userActions.hasWatched ? 'Unmark as Watched' : 'Mark as Watched'}
+        </button>
 
-            <div className="flex items-center gap-2 bg-gray-100 p-2 rounded-lg">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <StarIcon
-                  key={star}
-                  className={`h-6 w-6 cursor-pointer ${
-                    star <= rating ? 'text-yellow-500 fill-current' : 'text-gray-400'
-                  }`}
-                  onClick={() => setRating(star)}
-                />
-              ))}
-            </div>
-
-            <button
-              onClick={handleRateAndComment}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
-            >
-              <ChatBubbleLeftIcon className="h-5 w-5"/>
-              {userActions.userRating ? 'Update Rating' : 'Submit Rating'}
-            </button>
-          </>
-        ) : (
+        {/* Maç FINISHED değilse göster */}
+        {match.status !== 'FINISHED' && (
           <button
-            onClick={() => handleWatchlist(userActions.isInWatchlist ? 'remove' : 'add')}
+            onClick={handleWatchlistToggle}
             className={`flex items-center gap-2 px-4 py-2 ${
-              userActions.isInWatchlist
-                ? 'bg-red-600 hover:bg-red-700'
-                : 'bg-green-600 hover:bg-green-700'
+              userActions.isInWatchlist ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
             } text-white rounded-lg`}
           >
-            <BookmarkIcon className="h-5 w-5"/>
+            <BookmarkIcon className="h-5 w-5" />
             {userActions.isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
           </button>
         )}
 
-        <button
-          onClick={handleFavorite}
-          className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50"
-          disabled={userActions.hasFavorited}
-        >
-          <StarIcon className="h-5 w-5"/>
-          {userActions.hasFavorited ? 'Favorited' : 'Add to Favorites'}
-        </button>
-
+        {userActions.hasFavorited ? (
+          <button
+            onClick={handleFavoriteToggle}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
+          >
+            <StarIcon className="h-5 w-5 text-yellow-400" />
+            Remove from Favorites
+          </button>
+        ) : (
+          <button
+            onClick={handleFavoriteToggle}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
+          >
+            <StarIcon className="h-5 w-5" />
+            Add to Favorites
+          </button>
+        )}
       </div>
 
-      {/* Yorum Bölümü */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-4">Comments & Ratings</h2>
-        {match.status === 'FINISHED' && (
-          <>
+      {/* Yorum ve Puanlama */}
+      {match.status === 'FINISHED' && (
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold mb-4 text-white">Comments & Ratings</h2>
+
+          {/* Yorum Ekleme */}
+          <div className="mb-6 bg-gray-700 p-4 rounded-lg">
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder="Write your comment..."
-              className="w-full p-3 border border-gray-300 rounded-lg mb-3"
+              className="w-full p-3 bg-gray-600 text-white border border-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 mb-3"
               rows={3}
             />
 
-            <div className="space-y-4">
-              {match.comments.map((comment, idx) => (
-                <div key={idx} className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center justify-between">
+              <div className="flex">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    className="focus:outline-none"
+                  >
+                    <StarIcon
+                      className={`w-6 h-6 mx-1 ${
+                        star <= rating ? 'text-yellow-400 fill-current' : 'text-gray-400'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleSubmit}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                disabled={!comment.trim() && rating === 0}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+
+          {/* Yorum Listesi */}
+          <div className="space-y-4">
+            {match.comments
+              .filter(comment => comment.content && comment.content.trim() !== '')  // boş içerikleri filtrele
+              .map((comment, idx) => (
+                <div key={idx} className="bg-gray-700 p-4 rounded-lg">
                   <div className="flex justify-between">
                     <div>
-                      <h4 className="text-gray-500 font-bold">{comment.username}</h4>
-                      <p className="text-gray-700">{comment.content}</p>
+                      <h4 className="font-bold text-white">{comment.username}</h4>
+                      <p className="text-gray-300 mt-1">{comment.content}</p>
                     </div>
-                    <div className="flex flex-col items-center">
-                      {match.ratings[idx] && (
-                        <div className="flex">
-                          {Array.from({ length: match.ratings[idx].score }).map((_, i) => (
-                            <StarIcon key={i} className="h-4 w-4 text-yellow-500" />
-                          ))}
-                        </div>
-                      )}
-                      <span className="text-sm text-gray-500 mt-1">
-                        {new Date(comment.createdAt).toLocaleDateString()}
-  </span>
+
+                    <div className="flex flex-col items-end">
+                      <div className="flex">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const commentRating = match.ratings.find(r =>
+                            r.username === comment.username
+                          )?.score || 0;
+
+                          return (
+                            <StarIcon
+                              key={star}
+                              className={`w-5 h-5 ${
+                                star <= commentRating ? 'text-yellow-400 fill-current' : 'text-gray-500'
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <span className="text-sm text-gray-400 mt-1">
+              {new Date(comment.createdAt).toLocaleDateString()}
+            </span>
                     </div>
                   </div>
                 </div>
               ))}
-            </div>
-          </>
-        )}
-      </div>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }

@@ -206,6 +206,74 @@ public class MatchesController : ControllerBase
         return BadRequest("Error while adding comment and/or rating: " + e.Message);
     }
 }
+    [HttpPut("{matchId}/rate-comment")]
+[Authorize]
+public async Task<IActionResult> UpdateCommentAndRating(int matchId, [FromBody] CreateRatingCommentDto dto)
+{
+    var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+    if (userIdClaim == null)
+        return Unauthorized("User not found in token");
+
+    int userId = int.Parse(userIdClaim.Value);
+
+    // Yorumu kontrol et
+    var comment = await _context.Comments
+        .FirstOrDefaultAsync(c => c.MatchId == matchId && c.UserId == userId);
+
+    if (comment != null && !string.IsNullOrWhiteSpace(dto.Content))
+    {
+        comment.Content = dto.Content;
+        comment.CreatedAt = DateTime.UtcNow;
+    }
+    else if (comment == null && !string.IsNullOrWhiteSpace(dto.Content))
+    {
+        // Yeni yorum ekle (isteğe bağlı)
+        _context.Comments.Add(new Comment
+        {
+            UserId = userId,
+            MatchId = matchId,
+            Content = dto.Content,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
+    // Rating kontrol et
+    var rating = await _context.Ratings
+        .FirstOrDefaultAsync(r => r.MatchId == matchId && r.UserId == userId);
+
+    if (rating != null && dto.Score.HasValue)
+    {
+        rating.Score = dto.Score.Value;
+        rating.CreatedAt = DateTime.UtcNow;
+    }
+    else if (rating == null && dto.Score.HasValue)
+    {
+        // Yeni rating ekle (isteğe bağlı)
+        _context.Ratings.Add(new Rating
+        {
+            UserId = userId,
+            MatchId = matchId,
+            Score = dto.Score.Value,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+
+    // Watched kaydı da ekle
+    var watched = await _context.WatchedMatches
+        .FirstOrDefaultAsync(w => w.UserId == userId && w.MatchId == matchId);
+    if (watched == null)
+    {
+        _context.WatchedMatches.Add(new WatchedMatch
+        {
+            UserId = userId,
+            MatchId = matchId,
+            WatchedAt = DateTime.UtcNow
+        });
+    }
+
+    await _context.SaveChangesAsync();
+    return Ok("Updated");
+}
 
     [HttpPost("{matchId}/watch")]
     public async Task<IActionResult> MarkAsWatched(int matchId)
@@ -284,72 +352,22 @@ public class MatchesController : ControllerBase
         }
     }
     
-    [HttpPut("{matchId}/rate-comment")]
-[Authorize]
-public async Task<IActionResult> UpdateCommentAndRating(int matchId, [FromBody] CreateRatingCommentDto dto)
-{
-    var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-    if (userIdClaim == null)
-        return Unauthorized("User not found in token");
-
-    int userId = int.Parse(userIdClaim.Value);
-
-    // Yorumu kontrol et
-    var comment = await _context.Comments
-        .FirstOrDefaultAsync(c => c.MatchId == matchId && c.UserId == userId);
-
-    if (comment != null && !string.IsNullOrWhiteSpace(dto.Content))
+    [HttpGet("{matchId}/comments")]
+    public async Task<IActionResult> GetCommentsForMatch(int matchId)
     {
-        comment.Content = dto.Content;
-        comment.CreatedAt = DateTime.UtcNow;
-    }
-    else if (comment == null && !string.IsNullOrWhiteSpace(dto.Content))
-    {
-        // Yeni yorum ekle (isteğe bağlı)
-        _context.Comments.Add(new Comment
-        {
-            UserId = userId,
-            MatchId = matchId,
-            Content = dto.Content,
-            CreatedAt = DateTime.UtcNow
-        });
+        var comments = await _context.Comments
+            .Where(c => c.MatchId == matchId && !string.IsNullOrWhiteSpace(c.Content))
+            .Include(c => c.User)  // Eğer yorum yapan kullanıcı bilgisi de gerekiyorsa
+            .Select(c => new 
+            {
+                c.Id,
+                c.Content,
+                c.CreatedAt,
+                UserName = c.User.Username
+            })
+            .ToListAsync();
+
+        return Ok(comments);
     }
 
-    // Rating kontrol et
-    var rating = await _context.Ratings
-        .FirstOrDefaultAsync(r => r.MatchId == matchId && r.UserId == userId);
-
-    if (rating != null && dto.Score.HasValue)
-    {
-        rating.Score = dto.Score.Value;
-        rating.CreatedAt = DateTime.UtcNow;
-    }
-    else if (rating == null && dto.Score.HasValue)
-    {
-        // Yeni rating ekle (isteğe bağlı)
-        _context.Ratings.Add(new Rating
-        {
-            UserId = userId,
-            MatchId = matchId,
-            Score = dto.Score.Value,
-            CreatedAt = DateTime.UtcNow
-        });
-    }
-
-    // Watched kaydı da ekle
-    var watched = await _context.WatchedMatches
-        .FirstOrDefaultAsync(w => w.UserId == userId && w.MatchId == matchId);
-    if (watched == null)
-    {
-        _context.WatchedMatches.Add(new WatchedMatch
-        {
-            UserId = userId,
-            MatchId = matchId,
-            WatchedAt = DateTime.UtcNow
-        });
-    }
-
-    await _context.SaveChangesAsync();
-    return Ok("Updated");
-}
 }

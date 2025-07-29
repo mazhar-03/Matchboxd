@@ -84,6 +84,22 @@ public class UserController : ControllerBase
         return Ok(favorites);
     }
     
+    [HttpGet("me/favorites/{matchId}")]
+    [Authorize]
+    public async Task<IActionResult> IsFavorite(int matchId)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim == null)
+            return Unauthorized("User not found in token");
+
+        int userId = int.Parse(userIdClaim.Value);
+
+        var exists = await _context.Favorites.AnyAsync(f => f.UserId == userId && f.MatchId == matchId);
+
+        return Ok(new { hasFavorited = exists });
+    }
+
+    
     [HttpPost("me/favorite/toggle")]
     [Authorize]
     public async Task<IActionResult> ToggleFavorite([FromBody] ToggleFavoriteDto dto)
