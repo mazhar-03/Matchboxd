@@ -33,6 +33,8 @@ export default function MatchDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [hoverStar, setHoverStar] = useState<number>(0);
+
   const [userActions, setUserActions] = useState({
     hasWatched: false,
     hasFavorited: false,
@@ -214,7 +216,7 @@ export default function MatchDetailPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ MatchId: Number(id) }) // id string olabilir, number yap
+        body: JSON.stringify({MatchId: Number(id)}) // id string olabilir, number yap
       });
 
       if (res.ok) {
@@ -236,9 +238,6 @@ export default function MatchDetailPage() {
   };
 
 
-
-
-
   if (loading) return <div className="text-center py-8">Loading...</div>;
   if (error) return <div className="text-center text-red-600 py-8">Error: {error}</div>;
   if (!match) return <div className="text-center py-8">Match not found</div>;
@@ -247,13 +246,14 @@ export default function MatchDetailPage() {
     <div className="max-w-4xl mx-auto p-4">
       {/* Maç Detayları */}
       <div className="bg-gray-800 text-white p-6 rounded-lg mb-6 relative">
-        <Link href="/matches" className="absolute top-4 left-4 flex items-center text-sm hover:text-gray-300 transition-colors">
-          <ArrowLeftIcon className="w-5 h-5 mr-1" />
+        <Link href="/matches"
+              className="absolute top-4 left-4 flex items-center text-sm hover:text-gray-300 transition-colors">
+          <ArrowLeftIcon className="w-5 h-5 mr-1"/>
           <span>Matches</span>
         </Link>
 
         <div className="absolute top-4 right-4 flex items-center text-sm">
-          <EyeIcon className="w-5 h-5 mr-1" />
+          <EyeIcon className="w-5 h-5 mr-1"/>
           <span>{watchedCount} watched</span>
         </div>
 
@@ -284,18 +284,14 @@ export default function MatchDetailPage() {
       {/* Kullanıcı Aksiyonları */}
       <div className="flex flex-wrap gap-4 mb-8">
         <button
-          onClick={match.status === "FINISHED" ? handleWatchToggle : undefined}
-          disabled={match.status !== "FINISHED"}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white ${
-            userActions.hasWatched
-              ? 'bg-yellow-600 hover:bg-yellow-700'
-              : 'bg-blue-600 hover:bg-blue-700'
-          } ${match.status !== "FINISHED" ? 'opacity-50 cursor-not-allowed hover:bg-blue-600' : ''}`}
+          onClick={handleWatchToggle}
+          className={`flex items-center gap-2 px-4 py-2 ${
+            userActions.hasWatched ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'
+          } text-white rounded-lg`}
         >
-          <EyeIcon className="h-5 w-5" />
+          <EyeIcon className="h-5 w-5"/>
           {userActions.hasWatched ? 'Unmark as Watched' : 'Mark as Watched'}
         </button>
-
 
         {/* Maç FINISHED değilse göster */}
         {match.status !== 'FINISHED' && (
@@ -305,7 +301,7 @@ export default function MatchDetailPage() {
               userActions.isInWatchlist ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
             } text-white rounded-lg`}
           >
-            <BookmarkIcon className="h-5 w-5" />
+            <BookmarkIcon className="h-5 w-5"/>
             {userActions.isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
           </button>
         )}
@@ -315,7 +311,7 @@ export default function MatchDetailPage() {
             onClick={handleFavoriteToggle}
             className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
           >
-            <StarIcon className="h-5 w-5 text-yellow-400" />
+            <StarIcon className="h-5 w-5 text-yellow-400"/>
             Remove from Favorites
           </button>
         ) : (
@@ -323,7 +319,7 @@ export default function MatchDetailPage() {
             onClick={handleFavoriteToggle}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg"
           >
-            <StarIcon className="h-5 w-5" />
+            <StarIcon className="h-5 w-5"/>
             Add to Favorites
           </button>
         )}
@@ -345,20 +341,61 @@ export default function MatchDetailPage() {
             />
 
             <div className="flex items-center justify-between">
-              <div className="flex">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => setRating(star)}
-                    className="focus:outline-none"
-                  >
-                    <StarIcon
-                      className={`w-6 h-6 mx-1 ${
-                        star <= rating ? 'text-yellow-400 fill-current' : 'text-gray-400'
-                      }`}
-                    />
-                  </button>
-                ))}
+              <div className="flex items-center">
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const isFilled = rating >= star;
+                  const isHalfFilled = !isFilled && rating >= star - 0.5;
+
+                  return (
+                    <div
+                      key={star}
+                      className="relative cursor-pointer"
+                      onMouseEnter={() => setHoverStar(star)}
+                      onMouseLeave={() => setHoverStar(0)}
+                      onClick={(e) => {
+                        const {left, width} = e.currentTarget.getBoundingClientRect();
+                        const x = e.clientX - left;
+                        const isHalf = x < width / 2;
+                        setRating(isHalf ? star - 0.5 : star);
+                      }}
+                    >
+                      {/* Boş yıldız arkaplanı */}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        className="w-8 h-8 text-gray-300"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                        />
+                      </svg>
+
+                      {/* Dolu kısım */}
+                      <div
+                        className={`absolute top-0 left-0 overflow-hidden 
+            ${isFilled ? 'w-full' : isHalfFilled ? 'w-1/2' : 'w-0'}`}
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-8 h-8 text-yellow-400"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <button
@@ -374,7 +411,7 @@ export default function MatchDetailPage() {
           {/* Yorum Listesi */}
           <div className="space-y-4">
             {match.comments
-              .filter(comment => comment.content && comment.content.trim() !== '') // boş içerikleri filtrele
+              .filter(comment => comment.content && comment.content.trim() !== '')
               .map((comment, idx) => {
                 const commentRating = match.ratings.find(r => r.username === comment.username)?.score || 0;
 
@@ -388,14 +425,25 @@ export default function MatchDetailPage() {
 
                       <div className="flex flex-col items-end">
                         <div className="flex">
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <StarIcon
-                              key={star}
-                              className={`w-5 h-5 ${
-                                star <= commentRating ? 'text-yellow-400 fill-current' : 'text-gray-500'
-                              }`}
-                            />
-                          ))}
+                          {[1, 2, 3, 4, 5].map(star => {
+                            const isFilled = commentRating >= star;
+                            const isHalfFilled = !isFilled && commentRating >= star - 0.5;
+
+                            return (
+                              <div key={star} className="relative w-5 h-5">
+                                {/* Boş yıldız arkaplanı */}
+                                <StarIcon className={`absolute w-5 h-5 text-gray-500`}/>
+
+                                {/* Dolu kısım */}
+                                <div
+                                  className={`absolute top-0 left-0 overflow-hidden 
+                          ${isFilled ? 'w-full' : isHalfFilled ? 'w-1/2' : 'w-0'}`}
+                                >
+                                  <StarIcon className={`w-5 h-5 text-yellow-400 fill-current`}/>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                         <span className="text-sm text-gray-400 mt-1">
                 {new Date(comment.createdAt).toLocaleDateString()}
@@ -406,8 +454,6 @@ export default function MatchDetailPage() {
                 );
               })}
           </div>
-
-
         </div>
       )}
     </div>
