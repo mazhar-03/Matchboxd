@@ -99,6 +99,23 @@ public class UserController : ControllerBase
         return Ok(new { hasFavorited = exists });
     }
 
+    [HttpPost("me/favorite/remove")]
+    public async Task<IActionResult> RemoveFromFavorites([FromBody] RemoveFavoriteDto dto)
+    {
+        var userId = await FindUserService.GetCurrentUserIdAsync(User, _context);
+
+        var favoriteItem = await _context.Favorites
+            .FirstOrDefaultAsync(f => f.UserId == userId && f.MatchId == dto.MatchId);
+
+        if (favoriteItem == null)
+            return NotFound("Match is not in your favorites.");
+
+        _context.Favorites.Remove(favoriteItem);
+        await _context.SaveChangesAsync();
+
+        return Ok("Match removed from favorites.");
+    }
+
     
     [HttpPost("me/favorite/toggle")]
     [Authorize]
