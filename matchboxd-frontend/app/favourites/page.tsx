@@ -71,14 +71,6 @@ export default function FavPage() {
               key={match.matchId}
               className="border rounded-xl p-4 shadow-md bg-white text-blue-600 relative"
             >
-              <button
-                onClick={() => removeFromFavorites(match.matchId)}
-                title="Remove from favorites"
-                className="absolute top-2 right-2 text-red-600 hover:text-red-800 transition"
-              >
-                <TrashIcon className="w-5 h-5" />
-              </button>
-
               <h3 className="text-xl font-semibold">
                 {match.homeTeam} <br />
                 <span className="text-gray-700">vs</span> <br />
@@ -95,8 +87,18 @@ export default function FavPage() {
                 })}
               </p>
               <p className="text-sm text-gray-600">Status: {match.status}</p>
+
+              <button
+                onClick={() => removeFromFavorites(match.matchId)}
+                title="Remove from favorites"
+                className="absolute bottom-2 right-2  text-red-600 hover:text-red-800 transition"
+              >
+                <TrashIcon className="w-5 h-5" />
+              </button>
             </div>
+
           ))}
+
         </div>
       )}
     </div>

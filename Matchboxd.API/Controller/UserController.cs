@@ -21,6 +21,34 @@ public class UserController : ControllerBase
     {
         _context = context;
     }
+    
+    [HttpPost("me/reviews/remove")]
+    public async Task<IActionResult> RemoveReview([FromBody] RemoveReviewDto dto)
+    {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdString, out int userId))
+            return Unauthorized();
+
+        // Find rating and comment entries for this user and match
+        var rating = await _context.Ratings
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.MatchId == dto.MatchId);
+
+        var comment = await _context.Comments
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.MatchId == dto.MatchId);
+
+        if (rating == null && comment == null)
+            return NotFound("No rating or comment found for this match.");
+
+        if (rating != null)
+            _context.Ratings.Remove(rating);
+
+        if (comment != null)
+            _context.Comments.Remove(comment);
+
+        await _context.SaveChangesAsync();
+
+        return Ok("Rating and/or comment removed successfully.");
+    }
 
     [HttpGet("me/reviews")]
     public async Task<IActionResult> GetUserReviews()
@@ -83,6 +111,8 @@ public class UserController : ControllerBase
 
         return Ok(favorites);
     }
+    
+    
     
     [HttpGet("me/favorites/{matchId}")]
     [Authorize]
@@ -210,5 +240,4 @@ public class UserController : ControllerBase
 
         return Ok(new { hasWatched });
     }
-
 }

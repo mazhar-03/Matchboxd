@@ -124,7 +124,6 @@ export default function WatchlistPage() {
               className="self-end mt-4 flex items-center gap-1 text-red-600 hover:text-red-800 transition"
             >
               <TrashIcon className="w-5 h-5" />
-              <span>Remove from watchlist</span>
             </button>
           </div>
         ))}
