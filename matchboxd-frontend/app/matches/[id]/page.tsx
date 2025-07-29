@@ -1,8 +1,8 @@
 'use client';
-
+import Link from 'next/link';
 import React, {useEffect, useState} from 'react';
 import {useParams} from 'next/navigation';
-import {StarIcon, EyeIcon, BookmarkIcon, ChatBubbleLeftIcon} from '@heroicons/react/24/solid';
+import {StarIcon, ArrowLeftIcon, EyeIcon, BookmarkIcon, ChatBubbleLeftIcon} from '@heroicons/react/24/solid';
 
 interface Match {
   id: number;
@@ -39,6 +39,20 @@ export default function MatchDetailPage() {
     isInWatchlist: false,
     userRating: null as number | null
   });
+  const [watchedCount, setWatchedCount] = useState(0);
+
+  useEffect(() => {
+    const fetchWatchedCount = async () => {
+      const res = await fetch(`http://localhost:5011/api/matches/${id}/watched/count`);
+      if (res.ok) {
+        const data = await res.json();
+        setWatchedCount(data.watchedCount);
+      }
+    };
+
+    fetchWatchedCount();
+  }, [id]);
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -75,35 +89,30 @@ export default function MatchDetailPage() {
     fetchData();
   }, [id]);
 
-  const handleWatch = async () => {
-    try {
-      const token = localStorage.getItem('authToken');
-      console.log('handleWatch token:', token);
-      if (!token) {
-        alert('Please login to mark as watched');
-        return;
-      }
+  useEffect(() => {
+    const fetchUserActions = async () => {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
 
-      const res = await fetch(`http://localhost:5011/api/matches/${id}/watch`, {
-        method: 'POST',
-        headers: {'Authorization': `Bearer ${token}`}
+      const res = await fetch(`http://localhost:5011/api/users/me/matches/${id}/watched`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
-      console.log('Mark as watched response status:', res.status);
-
-      const text = await res.text();
-      console.log('Mark as watched response text:', text);
 
       if (res.ok) {
-        setUserActions(prev => ({...prev, hasWatched: true}));
-        alert('Match marked as watched!');
-      } else {
-        alert(text);
+        const data = await res.json();
+        setUserActions(prev => ({
+          ...prev,
+          hasWatched: data.hasWatched,
+        }));
       }
-    } catch (err) {
-      console.error('Error marking as watched:', err);
-      alert('Error marking as watched');
-    }
-  };
+    };
+
+    fetchUserActions();
+  }, [id]);
+
+
 
   const handleRateAndComment = async () => {
     const token = localStorage.getItem('authToken');
@@ -200,7 +209,93 @@ export default function MatchDetailPage() {
     }
   };
 
+  const handleUnwatch = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert('Please login to unmark as watched');
+        return;
+      }
+
+      const res = await fetch(`http://localhost:5011/api/matches/${id}/watch`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const text = await res.text();
+      console.log('Unwatch response:', res.status, text);
+
+      if (res.ok) {
+        setUserActions(prev => ({ ...prev, hasWatched: false }));
+      } else {
+        alert(text);
+      }
+    } catch (err) {
+      console.error('Error unwatching match:', err);
+      alert('Error unwatching match');
+    }
+  };
+
+  const handleWatch = async () => {
+    try {
+      const token = localStorage.getItem('authToken');
+      console.log('handleWatch token:', token);
+      if (!token) {
+        alert('Please login to mark as watched');
+        return;
+      }
+
+      const res = await fetch(`http://localhost:5011/api/matches/${id}/watch`, {
+        method: 'POST',
+        headers: {'Authorization': `Bearer ${token}`}
+      });
+      console.log('Mark as watched response status:', res.status);
+
+      const text = await res.text();
+      console.log('Mark as watched response text:', text);
+
+      if (res.ok) {
+        setUserActions(prev => ({...prev, hasWatched: true}));
+      } else {
+        alert(text);
+      }
+    } catch (err) {
+      console.error('Error marking as watched:', err);
+      alert('Error marking as watched');
+    }
+  };
+
+  useEffect(() => {
+    const fetchWatchedStatus = async () => {
+      const token = localStorage.getItem('authToken');
+      console.log('handleWatch token:', token);
+      if (!token) {
+        alert('Please login to mark as watched');
+        return;
+      }
+
+      const res = await fetch(`http://localhost:5011/api/users/me/matches/${id}/watched`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUserActions(prev => ({ ...prev, hasWatched: data.hasWatched }));
+      } else {
+        console.error('Watched status fetch failed');
+      }
+    };
+
+    fetchWatchedStatus();
+  }, [id]);
+
+
   if (loading) return <div className="text-center py-8">Loading match details...</div>;
+  if (error) return <div className="text-center text-red-600 py-8">Error: {error}</div>;
   if (error) return <div className="text-center text-red-600 py-8">Error: {error}</div>;
   if (!match) return <div className="text-center py-8">Match not found</div>;
 
@@ -208,39 +303,62 @@ export default function MatchDetailPage() {
   return (
     <div className="max-w-4xl mx-auto p-4">
       {/* Maç Başlığı */}
-      <div className="bg-gray-800 text-white p-6 rounded-lg mb-6">
-        <h1 className="text-3xl font-bold text-center">
-          {match.homeTeam} vs {match.awayTeam}
-        </h1>
-        <div className="flex justify-between items-center mt-4">
-          <span className="text-gray-300">
-            {new Date(match.matchDate).toLocaleString()}
-          </span>
-          <span className={`px-3 py-1 rounded-full ${
+      <div className="bg-gray-800 text-white p-6 rounded-lg mb-6 relative">
+        <Link href="/matches" className="absolute top-4 left-4 flex items-center text-sm hover:text-gray-300 transition-colors">
+          <ArrowLeftIcon className="w-5 h-5 mr-1" />
+          <span>Matches</span>
+        </Link>
+        {/* Watched bilgisi - sağ üst köşede */}
+        <div className="flex justify-end items-center mb-2">
+          <EyeIcon className="w-5 h-5 mr-1" />
+          <span>{watchedCount}</span>
+        </div>
+
+        {/* Takım adları ve skor - merkezde */}
+        <div className="text-center space-y-2">
+          <div className="text-2xl font-bold">{match.homeTeam}</div>
+          <div className="text-xl">vs</div>
+          <div className="text-2xl font-bold">{match.awayTeam}</div>
+
+          {match.status === 'FINISHED' && (
+            <div className="text-4xl font-bold my-3">
+              {match.scoreHome} - {match.scoreAway}
+            </div>
+          )}
+
+          {/* Durum bilgisi - skorun altında */}
+          <div className={`px-3 py-1 rounded-full inline-block ${
             match.status === 'FINISHED' ? 'bg-green-600' :
               match.status === 'CANCELED' ? 'bg-red-600' : 'bg-yellow-600'
           }`}>
             {match.status}
-          </span>
+          </div>
         </div>
 
-        {match.status === 'FINISHED' && (
-          <div className="text-center text-4xl font-bold my-4">
-            {match.scoreHome} - {match.scoreAway}
-          </div>
-        )}
+        {/* Tarih bilgisi - en altta */}
+        <div className="text-center text-gray-300 mt-4">
+          {new Date(match.matchDate).toLocaleString()}
+        </div>
       </div>
 
       {/* Kullanıcı Aksiyon Butonları */}
       <div className="flex flex-wrap gap-4 mb-8">
         {match.status === 'FINISHED' ? (
           <>
-            {!userActions.hasWatched && (
+            {userActions.hasWatched ? (
+              <button
+                onClick={handleUnwatch}
+                className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg"
+              >
+                <EyeIcon className="h-5 w-5" />
+                Unmark as Watched
+              </button>
+            ) : (
               <button
                 onClick={handleWatch}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
               >
-                <EyeIcon className="h-5 w-5"/>
+                <EyeIcon className="h-5 w-5" />
                 Mark as Watched
               </button>
             )}
@@ -311,17 +429,17 @@ export default function MatchDetailPage() {
                       <h4 className="text-gray-500 font-bold">{comment.username}</h4>
                       <p className="text-gray-700">{comment.content}</p>
                     </div>
-                    <div className="flex items-center">
+                    <div className="flex flex-col items-center">
                       {match.ratings[idx] && (
                         <div className="flex">
-                          {Array.from({length: match.ratings[idx].score}).map((_, i) => (
-                            <StarIcon key={i} className="h-4 w-4 text-yellow-500"/>
+                          {Array.from({ length: match.ratings[idx].score }).map((_, i) => (
+                            <StarIcon key={i} className="h-4 w-4 text-yellow-500" />
                           ))}
                         </div>
                       )}
-                      <span className="text-sm text-gray-500 ml-2">
+                      <span className="text-sm text-gray-500 mt-1">
                         {new Date(comment.createdAt).toLocaleDateString()}
-                      </span>
+  </span>
                     </div>
                   </div>
                 </div>

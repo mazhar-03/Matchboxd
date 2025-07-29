@@ -1,6 +1,7 @@
 ﻿using Matchboxd.API.DAL;
 using Matchboxd.API.Dtos;
 using Matchboxd.API.Models;
+using Matchboxd.API.Services;
 
 namespace Matchboxd.API.Controller;
 
@@ -167,5 +168,14 @@ public class UserController : ControllerBase
         return Ok(diaryEntries);
     }
 
+    [HttpGet("me/matches/{matchId}/watched")]
+    public async Task<IActionResult> HasWatchedMatch(int matchId)
+    {
+        var userId = await FindUserService.GetCurrentUserIdAsync(User, _context);
+        var hasWatched = await _context.WatchedMatches
+            .AnyAsync(w => w.UserId == userId && w.MatchId == matchId);
+
+        return Ok(new { hasWatched });
+    }
 
 }

@@ -2,6 +2,7 @@
 using Matchboxd.API.DAL;
 using Matchboxd.API.Dtos;
 using Matchboxd.API.Models;
+using Matchboxd.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -113,6 +114,15 @@ public class MatchesController : ControllerBase
         }
     }
 
+    //Showing how many ppl watched that match
+    [HttpGet("{matchId}/watched/count")]
+    public async Task<IActionResult> GetWatchedCount(int matchId)
+    {
+        var count = await _context.WatchedMatches
+            .CountAsync(w => w.MatchId == matchId);
+
+        return Ok(new { watchedCount = count });
+    }
 
     [HttpPost("{id}/rate-comment")]
     [Authorize]
@@ -142,14 +152,17 @@ public class MatchesController : ControllerBase
 
         if (hasRating)
         {
-            var rating = new Rating
+            if (dto.Score != null)
             {
-                MatchId = id,
-                UserId = userId,
-                Score = dto.Score.Value,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.Ratings.Add(rating);
+                var rating = new Rating
+                {
+                    MatchId = id,
+                    UserId = userId,
+                    Score = dto.Score.Value,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.Ratings.Add(rating);
+            }
         }
 
         if (hasComment)
@@ -157,14 +170,17 @@ public class MatchesController : ControllerBase
             if (match.Status != "FINISHED")
                 return BadRequest("Cannot comment before match is finished");
 
-            var comment = new Comment
+            if (dto.Content != null)
             {
-                MatchId = id,
-                UserId = userId,
-                Content = dto.Content,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.Comments.Add(comment);
+                var comment = new Comment
+                {
+                    MatchId = id,
+                    UserId = userId,
+                    Content = dto.Content,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.Comments.Add(comment);
+            }
         }
 
         // 🚨 Automatically add to WatchedMatch if not already exists
@@ -191,12 +207,10 @@ public class MatchesController : ControllerBase
     }
 }
 
-
-
     [HttpPost("{matchId}/watch")]
     public async Task<IActionResult> MarkAsWatched(int matchId)
     {
-        var userId = await GetCurrentUserIdAsync(); 
+        var userId = await FindUserService.GetCurrentUserIdAsync(User, _context); 
 
         var alreadyWatched = await _context.WatchedMatches
             .AnyAsync(w => w.UserId == userId && w.MatchId == matchId);
@@ -213,6 +227,24 @@ public class MatchesController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok("Match marked as watched.");
     }
+    
+    [HttpDelete("{matchId}/watch")]
+    public async Task<IActionResult> UnmarkAsWatched(int matchId)
+    {
+        var userId = await FindUserService.GetCurrentUserIdAsync(User, _context);
+
+        var watchedMatch = await _context.WatchedMatches
+            .FirstOrDefaultAsync(w => w.UserId == userId && w.MatchId == matchId);
+
+        if (watchedMatch == null)
+            return NotFound("You have not marked this match as watched.");
+
+        _context.WatchedMatches.Remove(watchedMatch);
+        await _context.SaveChangesAsync();
+
+        return Ok("Match unmarked as watched.");
+    }
+
 
     [HttpPost("{id}/favorite")]
     [Authorize]
@@ -320,33 +352,4 @@ public async Task<IActionResult> UpdateCommentAndRating(int matchId, [FromBody] 
     await _context.SaveChangesAsync();
     return Ok("Updated");
 }
-
-
-    private async Task<int> GetCurrentUserIdAsync()
-    {
-        foreach(var claim in User.Claims)
-        {
-            Console.WriteLine($"Claim type: {claim.Type}, value: {claim.Value}");
-        }
-        // 1. Önce sub claim'ine bak
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-                          ?? User.FindFirst("sub")?.Value;
-    
-        if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out var userId))
-        {
-            return userId;
-        }
-
-        // 2. Eski yöntemle devam et
-        var usernameClaim = User.FindFirst(ClaimTypes.Name)?.Value 
-                            ?? User.FindFirst("username")?.Value;
-
-        if (string.IsNullOrEmpty(usernameClaim))
-            throw new UnauthorizedAccessException("User identifier not found in claims.");
-
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Username == usernameClaim);
-
-        return user?.Id ?? throw new UnauthorizedAccessException("User not found in database.");
-    }
 }
