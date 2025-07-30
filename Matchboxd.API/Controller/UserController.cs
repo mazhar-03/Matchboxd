@@ -1,14 +1,12 @@
 ﻿using Matchboxd.API.DAL;
 using Matchboxd.API.Dtos;
-using Matchboxd.API.Models;
 using Matchboxd.API.Services;
-
-namespace Matchboxd.API.Controller;
-
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+
+namespace Matchboxd.API.Controller;
 
 [ApiController]
 [Route("api/users")]
@@ -22,163 +20,9 @@ public class UserController : ControllerBase
         _context = context;
     }
     
-    [HttpPost("me/reviews/remove")]
-    public async Task<IActionResult> RemoveReview([FromBody] RemoveReviewDto dto)
-    {
-        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId))
-            return Unauthorized();
-
-        // Find rating and comment entries for this user and match
-        var rating = await _context.Ratings
-            .FirstOrDefaultAsync(r => r.UserId == userId && r.MatchId == dto.MatchId);
-
-        var comment = await _context.Comments
-            .FirstOrDefaultAsync(c => c.UserId == userId && c.MatchId == dto.MatchId);
-
-        if (rating == null && comment == null)
-            return NotFound("No rating or comment found for this match.");
-
-        if (rating != null)
-            _context.Ratings.Remove(rating);
-
-        if (comment != null)
-            _context.Comments.Remove(comment);
-
-        await _context.SaveChangesAsync();
-
-        return Ok("Rating and/or comment removed successfully.");
-    }
-
-    [HttpGet("me/reviews")]
-    public async Task<IActionResult> GetUserReviews()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null)
-            return Unauthorized("User not found in token");
-
-        int userId = int.Parse(userIdClaim.Value);
-
-        // Maçlarla birlikte yorum ve puanları da çek
-        var matches = await _context.Matches
-            .Include(m => m.Comments)
-            .Include(m => m.Ratings)
-            .Where(m => m.Comments.Any(c => c.UserId == userId) || m.Ratings.Any(r => r.UserId == userId))
-            .ToListAsync(); // <--- burada SQL biter, artık C# tarafındayız
-
-        var result = new List<ReviewDto>();
-
-        foreach (var match in matches)
-        {
-            var userComment = match.Comments.FirstOrDefault(c => c.UserId == userId);
-            var userRating = match.Ratings.FirstOrDefault(r => r.UserId == userId);
-
-            result.Add(new ReviewDto
-            {
-                MatchId = match.Id,
-                HomeTeam = match.HomeTeam,
-                AwayTeam = match.AwayTeam,
-                Score = userRating?.Score,
-                Comment = userComment?.Content,
-                ReviewedAt = userComment?.CreatedAt ?? userRating?.CreatedAt
-            });
-        }
-
-        return Ok(result);
-    }
-    
-    [HttpGet("me/favorites")]
-    public async Task<IActionResult> GetUserFavorites()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null)
-            return Unauthorized("User not found in token");
-
-        int userId = int.Parse(userIdClaim.Value);
-
-        var favorites = await _context.Favorites
-            .Where(f => f.UserId == userId)
-            .Include(f => f.Match)
-            .Select(f => new FavoriteMatchDto
-            {
-                MatchId = f.MatchId,
-                HomeTeam = f.Match.HomeTeam,
-                AwayTeam = f.Match.AwayTeam,
-                MatchDate = f.Match.MatchDate,
-                Status = f.Match.Status,
-            })
-            .ToListAsync();
-
-        return Ok(favorites);
-    }
     
     
-    
-    [HttpGet("me/favorites/{matchId}")]
-    [Authorize]
-    public async Task<IActionResult> IsFavorite(int matchId)
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-        if (userIdClaim == null)
-            return Unauthorized("User not found in token");
 
-        int userId = int.Parse(userIdClaim.Value);
-
-        var exists = await _context.Favorites.AnyAsync(f => f.UserId == userId && f.MatchId == matchId);
-
-        return Ok(new { hasFavorited = exists });
-    }
-
-    [HttpPost("me/favorite/remove")]
-    public async Task<IActionResult> RemoveFromFavorites([FromBody] RemoveFavoriteDto dto)
-    {
-        var userId = await FindUserService.GetCurrentUserIdAsync(User, _context);
-
-        var favoriteItem = await _context.Favorites
-            .FirstOrDefaultAsync(f => f.UserId == userId && f.MatchId == dto.MatchId);
-
-        if (favoriteItem == null)
-            return NotFound("Match is not in your favorites.");
-
-        _context.Favorites.Remove(favoriteItem);
-        await _context.SaveChangesAsync();
-
-        return Ok("Match removed from favorites.");
-    }
-
-    
-    [HttpPost("me/favorite/toggle")]
-    [Authorize]
-    public async Task<IActionResult> ToggleFavorite([FromBody] ToggleFavoriteDto dto)
-    {
-        int userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-
-        var match = await _context.Matches.FindAsync(dto.MatchId);
-        if (match == null)
-            return NotFound("Match not found");
-
-        var fav = await _context.Favorites
-            .FirstOrDefaultAsync(f => f.UserId == userId && f.MatchId == dto.MatchId);
-
-        if (fav != null)
-        {
-            _context.Favorites.Remove(fav);
-            await _context.SaveChangesAsync();
-            return Ok("Removed from favorites");
-        }
-
-        _context.Favorites.Add(new Favorite
-        {
-            MatchId = dto.MatchId,
-            UserId = userId,
-            CreatedAt = DateTime.UtcNow
-        });
-
-        await _context.SaveChangesAsync();
-        return Ok("Added to favorites");
-    }
-
-    
     [HttpGet("me/diary")]
     public async Task<IActionResult> GetUserDiary()
     {

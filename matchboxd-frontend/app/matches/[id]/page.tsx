@@ -210,7 +210,7 @@ export default function MatchDetailPage() {
     }
 
     try {
-      const res = await fetch('http://localhost:5011/api/users/me/favorite/toggle', {
+      const res = await fetch('http://localhost:5011/api/users/me/favorites/toggle', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

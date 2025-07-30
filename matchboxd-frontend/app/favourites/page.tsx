@@ -44,7 +44,7 @@ export default function FavPage() {
     try {
       const token = localStorage.getItem("authToken");
       await axios.post(
-        "http://localhost:5011/api/users/me/favorite/remove",
+        "http://localhost:5011/api/users/me/favorites/remove",
         { matchId },
         {
           headers: { Authorization: `Bearer ${token}` },

@@ -51,7 +51,7 @@ export default function DiaryPage() {
     try {
       const token = localStorage.getItem("authToken");
       await axios.post(
-        `http://localhost:5011/api/users/me/favorite/toggle`,
+        `http://localhost:5011/api/users/me/favorites/toggle`,
         { matchId },
         {
           headers: { Authorization: `Bearer ${token}` },
