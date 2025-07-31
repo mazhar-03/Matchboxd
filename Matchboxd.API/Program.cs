@@ -33,8 +33,9 @@ builder.Services.AddHttpClient("FootballData", client =>
     client.DefaultRequestHeaders.Add("X-Auth-Token", config["FootballDataApi:ApiKey"]);
 });
 
-var con = builder.Configuration.GetConnectionString("UniversityDatabase")
-          ?? throw new Exception("University connection string is not found!");
+var con = builder.Configuration.GetConnectionString("DefaultConnection")
+          ?? throw new Exception("Default connection string is not found!");
+Console.WriteLine($"Loaded Connection String: {con?.Substring(0, 30)}..."); 
 
 var jwtConfigData = builder.Configuration.GetSection("Jwt");
 builder.Services.Configure<JwtOptions>(jwtConfigData);
@@ -62,7 +63,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(con));
+    options.UseNpgsql(con));
 
 builder.Services.AddScoped<MatchImportService>();
 builder.Services.AddControllers();

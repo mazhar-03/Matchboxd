@@ -1,4 +1,5 @@
-﻿using Matchboxd.API.DAL;
+﻿using System.Text.RegularExpressions;
+using Matchboxd.API.DAL;
 using Matchboxd.API.Dtos;
 using Matchboxd.API.Models;
 using Matchboxd.API.Services;
@@ -51,8 +52,26 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
+        // Validate email
+        var emailError = Validation.ValidateEmail(dto.Email);
+        if (emailError != null)
+            return BadRequest(emailError);
+
+        // Validate username
+        var usernameError = Validation.ValidateUsername(dto.Username);
+        if (usernameError != null)
+            return BadRequest(usernameError);
+
+        // Validate password
+        var passwordError = Validation.ValidatePassword(dto.Password);
+        if (passwordError != null)
+            return BadRequest(passwordError);
+
         if (await _context.Users.AnyAsync(u => u.Email == dto.Email))
-            return BadRequest("Email already registered.");
+            return BadRequest("Email is already registered.");
+
+        if (await _context.Users.AnyAsync(u => u.Username == dto.Username))
+            return BadRequest("Username is already taken.");
 
         var user = new User
         {
@@ -70,11 +89,11 @@ public class AuthController : ControllerBase
         var frontendBaseUrl = "http://localhost:3000";
         var verificationLink = $"{frontendBaseUrl}/verify-email?token={user.VerificationToken}";
 
-
         await _emailService.SendVerificationEmailAsync(user.Email, user.Username, verificationLink);
 
         return Ok("Registration successful! Please check your email to verify your account.");
     }
+
 
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailDto dto)
