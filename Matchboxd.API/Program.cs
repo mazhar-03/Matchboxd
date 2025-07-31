@@ -4,6 +4,7 @@ using Matchboxd.API.DAL;
 using Matchboxd.API.Helpers.Options;
 using Matchboxd.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -35,13 +36,16 @@ builder.Services.AddHttpClient("FootballData", client =>
 
 var con = builder.Configuration.GetConnectionString("DefaultConnection")
           ?? throw new Exception("Default connection string is not found!");
-Console.WriteLine($"Loaded Connection String: {con?.Substring(0, 30)}..."); 
 
 var jwtConfigData = builder.Configuration.GetSection("Jwt");
 builder.Services.Configure<JwtOptions>(jwtConfigData);
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<EmailService>();
+
+// Add health check services
+builder.Services.AddHealthChecks()
+    .AddNpgSql(con, name: "postgresql", tags: new[] { "database" });
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -86,5 +90,20 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+app.MapGet("/", () => "Welcome to Matchboxd API!");
+
+// Enhanced health check
+app.MapHealthChecks("/api/health", new HealthCheckOptions {
+    ResponseWriter = async (context, report) => {
+        await context.Response.WriteAsJsonAsync(new {
+            Status = report.Status.ToString(),
+            Checks = report.Entries.Select(e => new {
+                Name = e.Key,
+                Status = e.Value.Status.ToString(),
+                Duration = e.Value.Duration
+            })
+        });
+    }
+});
 
 app.Run();
